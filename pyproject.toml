@@ -1,0 +1,63 @@
+[project]
+name = "grayscalelib.interface"
+description = "An abstract interface for manipulating grayscale data."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Marco Heisig" },
+]
+keywords = ["grayscale", "video", "image", "pixel"]
+dependencies = []
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "ruff",
+    "pre-commit",
+]
+test = [
+    "coverage",
+    "pytest",
+    "pytest-cov",
+]
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 98
+target-version = ['py311']
+include = '\.pyi?$'
+
+[tool.isort]
+atomic = true
+profile = "black"
+line_length = 98
+skip_gitignore = true
+known_first_party = ["grayscalelib"]
+
+[tool.ruff]
+line-length = 98
+select = [
+    "F",  # pyflakes
+    "E",  # pycodestyle
+    "B",  # bugbear
+]
+src = ["src"]
+target-version = "py311"
+ignore = [
+    "B008", # function calls in argument defaults
+    "E741", # variables named I, O, or l
+]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+reportMissingImports = true
