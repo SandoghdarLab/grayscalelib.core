@@ -28,21 +28,28 @@ class Pixels(Encodable, Generic[*Shape]):
 
     @property
     @abstractmethod
-    def shape(self) -> tuple[*Shape]: ...
+    def shape(self) -> tuple[*Shape]:
+        """A tuple that describes the size of each axis."""
+        ...
 
     @property
     @abstractmethod
-    def precision(self) -> int: ...
+    def precision(self) -> int:
+        """The number of bits of precision of each pixel value."""
+        ...
 
     @property
     def denominator(self) -> int:
+        """The denominator of the internal fractional encoding of each pixel value."""
         return 2 ** self.precision - 1
 
     @property
     def rank(self) -> int:
+        """The number of axes of this container."""
         return len(self.shape)
 
     def __len__(self: Pixels[T, *tuple]) -> T:
+        """The size of the first axis of this container."""
         if len(self.shape) == 0:
             raise RuntimeError("A rank zero container has no length.")
         return self.shape[0]
@@ -52,18 +59,20 @@ class Pixels(Encodable, Generic[*Shape]):
 
     @classmethod
     def zeros(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:
+        """A container of all zeros of the supplied shape."""
         result = cls._zeros_(shape)
         assert result.shape == shape
-        assert result.precision == 0
+        assert result.precision == 1
         return result
 
     @classmethod
     def _zeros_(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:
         _ = shape
-        raise MissingClassmethod(cls, 'creating zeros')
+        raise MissingClassmethod(cls, "creating zeros")
 
     @classmethod
     def ones(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:
+        """A container of all ones of the supplied shape."""
         result = cls._ones_(shape)
         assert result.shape == shape
         assert result.precision == 1
@@ -72,20 +81,22 @@ class Pixels(Encodable, Generic[*Shape]):
     @classmethod
     def _ones_(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:
         _ = shape
-        raise MissingClassmethod(cls, 'creating ones')
+        raise MissingClassmethod(cls, "creating ones")
 
     # getitem
 
     def __getitem__(self: Pixels, index: EllipsisType | int | slice | tuple[int | slice, ...]) -> Pixels:
+        """Select a particular index or slice of one or  more axes."""
         return self._getitem_(canonicalize_index(index, self.shape))
 
     def _getitem_(self, index: tuple[int | slice, ...]) -> Pixels[*tuple[int, ...]]:
         _ = index
-        raise MissingMethod(self, 'indexing')
+        raise MissingMethod(self, "indexing")
 
     # permute
 
     def permute(self, *permutation: int) -> Pixels:
+        """Reorder all axes according to the supplied integers."""
         rank = self.rank
         if not isinstance(permutation, tuple):
             raise TypeError(f"A permutation must be a tuple, not a {type(permutation)}.")
@@ -109,22 +120,26 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _permute_(self, permutation: tuple[int, ...]) -> Pixels:
         _ = permutation
-        raise MissingMethod(self, 'permuting')
+        raise MissingMethod(self, "permuting")
 
     # bool
 
     def __bool__(self) -> bool:
+        """Whether at least one pixel in the container is not zero."""
         cls = encoding(type(self))
         result = encode_as(self, cls)._bool_()
         assert result is True or result is False
         return result
 
     def _bool_(self) -> bool:
-        raise MissingMethod(self, 'determining the truth of')
+        raise MissingMethod(self, "determining the truth of")
 
     # lshift
 
     def __lshift__(self: Pixels[*Shape], amount: int) -> Pixels[*Shape]:
+        """Increase the precision of the supplied pixels by some amount."""
+        if amount == 0:
+            return self
         if amount < 0:
             return self.__rshift__(-amount)
         cls = encoding(type(self))
@@ -136,11 +151,14 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _lshift_(self: Self, amount: int) -> Self:
         _ = amount
-        raise MissingMethod(self, 'increasing the precision of')
+        raise MissingMethod(self, "increasing the precision of")
 
     # rshift
 
     def __rshift__(self: Pixels[*Shape], amount: int) -> Pixels[*Shape]:
+        """Decrease the precision of the supplied pixels by some amount."""
+        if amount == 0:
+            return self
         if amount < 0:
             return self.__lshift__(-amount)
         cls = encoding(type(self))
@@ -152,11 +170,12 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _rshift_(self: Self, amount: int) -> Self:
         _ = amount
-        raise MissingMethod(self, 'decreasing the precision of')
+        raise MissingMethod(self, "decreasing the precision of")
 
     # pow
 
     def __pow__(self: Pixels[*Shape], exponent: float) -> Pixels[*Shape]:
+        # TODO clarify semantics, maybe allow pixels exponent.
         cls = encoding(type(self))
         result = encode_as(self, cls)._pow_(exponent)
         assert result.shape == self.shape
@@ -164,77 +183,84 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _pow_(self: Self, exponent: float) -> Self:
         _ = exponent
-        raise MissingMethod(self, 'exponentiating')
+        raise MissingMethod(self, "exponentiating")
 
     # abs
 
     def __abs__(self: Pixels[*Shape]) -> Pixels[*Shape]:
+        """Do nothing, since pixels are never negative."""
         cls = encoding(type(self))
-        result = encode_as(self, cls)._abs_
+        result = encode_as(self, cls)._abs_()
         assert result.shape == self.shape
         return result
 
     def _abs_(self: Self) -> Self:
-        raise MissingMethod(self, 'absing')
+        # Pixels are non-negative by definition
+        return self
 
     # not
 
     def __not__(self: Pixels[*Shape]) -> Pixels[*Shape]:
+        """One wherever the supplied container is zero, and zero otherwise."""
         cls = encoding(type(self))
-        result = encode_as(self, cls)._not_
+        result = encode_as(self, cls)._not_()
         assert result.shape == self.shape
         return result
 
     def _not_(self: Self) -> Self:
-        raise MissingMethod(self, 'noting')
+        raise MissingMethod(self, "logically negating")
 
     # invert
 
     def __invert__(self: Pixels[*Shape]) -> Pixels[*Shape]:
+        """Invert each pixel value of the supplied container."""
         cls = encoding(type(self))
-        result = encode_as(self, cls)._invert_
+        result = encode_as(self, cls)._invert_()
         assert result.shape == self.shape
         return result
 
     def _invert_(self: Self) -> Self:
-        raise MissingMethod(self, 'inverting')
+        raise MissingMethod(self, "inverting")
 
     # neg
 
+    # This is a weird operator for pixels.  The rule is that each pixel math
+    # operation is carried out just as expected, but the result is clipped to
+    # the [0, 1] interval.  For negation, this means that the resulting array
+    # is all zero.
     def __neg__(self: Pixels[*Shape]) -> Pixels[*Shape]:
-        cls = encoding(type(self))
-        result = encode_as(self, cls)._neg_
-        assert result.shape == self.shape
-        return result
-
-    def _neg_(self: Self) -> Self:
-        raise MissingMethod(self, 'neging')
+        """Return zeros of the same shape."""
+        return self.zeros(self.shape) << (self.precision - 1)
 
     # pos
 
     def __pos__(self: Pixels[*Shape]) -> Pixels[*Shape]:
+        """Do nothing, since pixels are already non-negative."""
         cls = encoding(type(self))
-        result = encode_as(self, cls)._pos_
+        result = encode_as(self, cls)._pos_()
         assert result.shape == self.shape
         return result
 
     def _pos_(self: Self) -> Self:
-        raise MissingMethod(self, 'posing')
+        # Pixels are non-negative by definition
+        return self
 
     # broadcast_to
 
     def broadcast_to(self, shape: tuple[*Rest]) -> Pixels[*Rest]:
+        """Replicate and stack the supplied data until it has the specified shape."""
         result = self._broadcast_to_(shape)
         assert result.shape == shape
         return result
 
     def _broadcast_to_(self, shape: tuple[*Rest]) -> Pixels[*Rest]:
         _ = shape
-        raise MissingMethod(self, 'broadcasting')
+        raise MissingMethod(self, "broadcasting")
 
     # broadcast
 
     def __broadcast__(self: Pixels, other: Pixels | Scalar) -> tuple[Pixels, Pixels]:
+        """Ensure the two supplied containers have the same shape and class."""
         cls = encoding(type(self), type(other))
         a = encode_as(self, cls)
         b = encode_as(other, cls)
@@ -244,6 +270,7 @@ class Pixels(Encodable, Generic[*Shape]):
     # add
 
     def __add__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """Add the values of the two containers and clip the result to [0, 1]."""
         a, b = self.__broadcast__(other)
         result = a._add_(b)
         assert result.shape == a.shape
@@ -255,11 +282,12 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _add_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'adding')
+        raise MissingMethod(self, "adding")
 
     # and
 
     def __and__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """The logical conjunction of the two supplied containers."""
         a, b = self.__broadcast__(other)
         result = a._and_(b)
         assert result.shape == a.shape
@@ -271,11 +299,13 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _and_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'anding')
+        raise MissingMethod(self, "computing the logical conjunction of")
 
     # floordiv
 
+    # TODO what should be the semantics of floordiv on pixels?
     def __floordiv__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """?"""
         a, b = self.__broadcast__(other)
         result = a._floordiv_(b)
         assert result.shape == a.shape
@@ -287,11 +317,13 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _floordiv_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'floordiving')
+        raise MissingMethod(self, "floordiv-ing")
 
     # mod
 
+    # TODO what should be the semantics of mod on pixels?
     def __mod__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """?"""
         a, b = self.__broadcast__(other)
         result = a._mod_(b)
         assert result.shape == a.shape
@@ -303,11 +335,12 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _mod_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'moding')
+        raise MissingMethod(self, "mod-ing")
 
     # mul
 
     def __mul__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """Multiply the values of the two containers."""
         a, b = self.__broadcast__(other)
         result = a._mul_(b)
         assert result.shape == a.shape
@@ -324,6 +357,7 @@ class Pixels(Encodable, Generic[*Shape]):
     # or
 
     def __or__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """The logical disjunction of the two supplied containers."""
         a, b = self.__broadcast__(other)
         result = a._or_(b)
         assert result.shape == a.shape
@@ -335,11 +369,12 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _or_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'oring')
+        raise MissingMethod(self, "computing the logical disjunction of")
 
     # sub
 
     def __sub__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """Subtract the values of the two containers and clip the result to [0, 1]."""
         a, b = self.__broadcast__(other)
         result = a._sub_(b)
         assert result.shape == a.shape
@@ -351,11 +386,13 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _sub_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'subing')
+        raise MissingMethod(self, "subtracting")
 
     # truediv
 
+    # TODO What should be the semantics of truediv on pixels?
     def __truediv__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """?"""
         a, b = self.__broadcast__(other)
         result = a._truediv_(b)
         assert result.shape == a.shape
@@ -367,11 +404,12 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _truediv_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'truediving')
+        raise MissingMethod(self, "dividing")
 
     # xor
 
     def __xor__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """The exclusive disjunction of the two supplied containers."""
         a, b = self.__broadcast__(other)
         result = a._xor_(b)
         assert result.shape == a.shape
@@ -383,11 +421,12 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _xor_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'xoring')
+        raise MissingMethod(self, "logical xor-ing")
 
     # lt
 
     def __lt__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """One wherever the left value is smaller than the right, zero otherwise."""
         a, b = self.__broadcast__(other)
         result = a._lt_(b)
         assert result.shape == a.shape
@@ -395,11 +434,12 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _lt_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'lting')
+        raise MissingMethod(self, "comparing")
 
     # gt
 
     def __gt__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """One wherever the left value is greater than the right, zero otherwise."""
         a, b = self.__broadcast__(other)
         result = a._gt_(b)
         assert result.shape == a.shape
@@ -411,6 +451,7 @@ class Pixels(Encodable, Generic[*Shape]):
     # le
 
     def __le__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """One wherever the left value is less than or equal to the right, zero otherwise."""
         a, b = self.__broadcast__(other)
         result = a._le_(b)
         assert result.shape == a.shape
@@ -418,11 +459,12 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _le_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'leing')
+        raise MissingMethod(self, "comparing")
 
     # ge
 
     def __ge__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """One wherever the left value is greater than or equal to the right, zero otherwise."""
         a, b = self.__broadcast__(other)
         result = a._ge_(b)
         assert result.shape == a.shape
@@ -434,6 +476,7 @@ class Pixels(Encodable, Generic[*Shape]):
     # eq
 
     def __eq__(self: Pixels, other: Pixels | Scalar) -> Pixels:
+        """One wherever the left value is equal to the right, zero otherwise."""
         a, b = self.__broadcast__(other)
         result = a._eq_(b)
         assert result.shape == a.shape
@@ -441,7 +484,7 @@ class Pixels(Encodable, Generic[*Shape]):
 
     def _eq_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'eqing')
+        raise MissingMethod(self, "determining the equality of")
 
 
 def MissingMethod(self, action) -> TypeError:
