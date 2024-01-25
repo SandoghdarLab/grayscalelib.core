@@ -82,11 +82,7 @@ def write_file_header(file = None):
     write(f"Rest = TypeVarTuple('Rest')\n")
     write(f"Scalar = {' | '.join(scalar_types)}\n")
     write(f"fallback_encoding: type | None = None\n\n")
-    write("def encoding(cls, *clss):")
-    write("    if fallback_encoding is None:")
-    write("        return choose_encoding(cls, *clss)")
-    write("    else:")
-    write("        return choose_encoding(cls, *clss, fallback_encoding)\n\n")
+    write("def encoding(cls, *clss): ...\n")
 
 
 def write_class_header(file = None):
@@ -101,38 +97,22 @@ def write_class_header(file = None):
     write("    @abstractmethod")
     write("    def precision(self) -> int: ...\n")
     write("    @property")
-    write("    def denominator(self) -> int:")
-    write("        return 2 ** self.precision - 1\n")
+    write("    def denominator(self) -> int: ...\n")
     write("    @property")
-    write("    def rank(self) -> int:")
-    write("        return len(self.shape)\n")
-    write("    def __len__(self: Pixels[A1, *tuple]) -> A1:")
-    write("        if len(self.shape) == 0:")
-    write("            raise RuntimeError(\"A rank zero container has no length.\")")
-    write("        return self.shape[0]\n")
+    write("    def rank(self) -> int: ...\n")
+    write("    def __len__(self: Pixels[A1, *tuple]) -> A1: ...\n")
+    write("    def __repr__(self) -> str: ...\n")
     write("    @classmethod")
-    write("    def zeros(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:")
-    write("        result = cls._zeros_(shape)")
-    write("        assert result.shape == shape")
-    write("        assert result.precision == 0")
-    write("        return result\n")
+    write("    def zeros(cls, shape: tuple[*Rest]) -> Pixels[*Rest]: ...\n")
     write("    @classmethod")
-    write("    def _zeros_(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:")
-    write("        _ = shape")
-    write("        raise MissingClassmethod(cls, 'creating zeros')\n")
+    write("    def _zeros_(cls, shape: tuple[*Rest]) -> Pixels[*Rest]: ...\n")
     write("    @classmethod")
-    write("    def ones(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:")
-    write("        result = cls._ones_(shape)")
-    write("        assert result.shape == shape")
-    write("        assert result.precision == 1")
-    write("        return result\n")
+    write("    def ones(cls, shape: tuple[*Rest]) -> Pixels[*Rest]: ...\n")
     write("    @classmethod")
-    write("    def _ones_(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:")
-    write("        _ = shape")
-    write("        raise MissingClassmethod(cls, 'creating ones')\n")
+    write("    def _ones_(cls, shape: tuple[*Rest]) -> Pixels[*Rest]: ...\n")
 
 
-def write_getitem_methods(file = None):
+def write_getitem_stubs(file = None):
     def write(string, **kwargs):
         print("    " + string, file=file, **kwargs)
 
@@ -146,90 +126,43 @@ def write_getitem_methods(file = None):
             write("@overload")
             write(f"def __getitem__(self: {before}, index: {what}) -> {after}: ...\n")
     indextype = "EllipsisType | int | slice | tuple[int | slice, ...]"
-    write(f"def __getitem__(self: Pixels, index: {indextype}) -> Pixels:")
-    write(f"    return self._getitem_(canonicalize_index(index, self.shape))\n")
-    write(f"def _getitem_(self, index: tuple[int | slice, ...]) -> Pixels[*tuple[int, ...]]:")
-    write(f"    _ = index")
-    write(f"    raise MissingMethod(self, 'indexing')\n")
+    write(f"def __getitem__(self: Pixels, index: {indextype}) -> Pixels: ...\n")
+    write(f"def _getitem_(self, index: tuple[int | slice, ...]) -> Pixels[*tuple[int, ...]]: ...\n")
 
 
-def write_one_pix_methods(file = None):
+def write_one_pix_stubs(file = None):
     def write(string, **kwargs):
         print("    " + string, file=file, **kwargs)
 
-    write("def __repr__(self) -> str:")
-    write("""    return f"<{type(self).__name__} shape={self.shape} precision={self.precision}>"\n""")
-
     write("# bool\n")
-    write("def __bool__(self) -> bool:")
-    write("    cls = encoding(type(self))")
-    write("    result = encode_as(self, cls)._bool_()")
-    write("    assert result is True or result is False")
-    write("    return result\n")
-    write("def _bool_(self) -> bool:")
-    write("    raise MissingMethod(self, 'determining the truth of')\n")
+    write("def __bool__(self) -> bool: ...\n")
+    write("def _bool_(self) -> bool: ...\n")
 
     write("# lshift\n")
-    write("def __lshift__(self: Pixels[*Shape], amount: int) -> Pixels[*Shape]:")
-    write("    if amount < 0:")
-    write("        return self.__rshift__(-amount)")
-    write("    cls = encoding(type(self))")
-    write("    pix = encode_as(self, cls)")
-    write("    result = pix._lshift_(amount)")
-    write("    assert result.shape == self.shape")
-    write("    assert result.precision == (self.precision + amount)")
-    write("    return result\n")
-    write("def _lshift_(self: Self, amount: int) -> Self:")
-    write("    _ = amount")
-    write("    raise MissingMethod(self, 'increasing the precision of')\n")
+    write("def __lshift__(self: Pixels[*Shape], amount: int) -> Pixels[*Shape]: ...\n")
+    write("def _lshift_(self: Self, amount: int) -> Self: ...\n")
 
     write("# rshift\n")
-    write("def __rshift__(self: Pixels[*Shape], amount: int) -> Pixels[*Shape]:")
-    write("    if amount < 0:")
-    write("        return self.__lshift__(-amount)")
-    write("    cls = encoding(type(self))")
-    write("    pix = encode_as(self, cls)")
-    write("    result = pix._rshift_(amount)")
-    write("    assert result.shape == self.shape")
-    write("    assert result.precision == max(0, (self.precision - amount))")
-    write("    return result\n")
-    write("def _rshift_(self: Self, amount: int) -> Self:")
-    write("    _ = amount")
-    write("    raise MissingMethod(self, 'decreasing the precision of')\n")
+    write("def __rshift__(self: Pixels[*Shape], amount: int) -> Pixels[*Shape]: ...\n")
+    write("def _rshift_(self: Self, amount: int) -> Self: ...\n")
 
     write("# pow\n")
-    write("def __pow__(self: Pixels[*Shape], exponent: float) -> Pixels[*Shape]:")
-    write("    cls = encoding(type(self))")
-    write("    result = encode_as(self, cls)._pow_(exponent)")
-    write("    assert result.shape == self.shape")
-    write("    return result\n")
-    write("def _pow_(self: Self, exponent: float) -> Self:")
-    write("    _ = exponent")
-    write("    raise MissingMethod(self, 'exponentiating')\n")
+    write("def __pow__(self: Pixels[*Shape], exponent: float) -> Pixels[*Shape]: ...\n")
+    write("def _pow_(self: Self, exponent: float) -> Self: ...\n")
 
     for method in one_pix_methods:
         write(f"# {method[2:-2]}\n")
-        write(f"def {method}(self: Pixels[*Shape]) -> Pixels[*Shape]:")
-        write(f"    cls = encoding(type(self))")
-        write(f"    result = encode_as(self, cls).{method[1:-1]}")
-        write(f"    assert result.shape == self.shape")
-        write(f"    return result\n")
-        write(f"def {method[1:-1]}(self: Self) -> Self:")
-        write(f"    raise MissingMethod(self, '{method[2:-2]}ing')\n")
+        write(f"def {method}(self: Pixels[*Shape]) -> Pixels[*Shape]: ...\n")
+        write(f"def {method[1:-1]}(self: Self) -> Self: ...\n")
 
 
-def write_two_pix_methods(file = None):
+def write_two_pix_stubs(file = None):
     def write(string, **kwargs):
         print("    " + string, file=file, **kwargs)
 
     write("# broadcast_to\n")
-    write("def broadcast_to(self, shape: tuple[*Rest]) -> Pixels[*Rest]:")
-    write("    result = self._broadcast_to_(shape)")
-    write("    assert result.shape == shape")
-    write("    return result\n")
-    write("def _broadcast_to_(self, shape: tuple[*Rest]) -> Pixels[*Rest]:")
-    write("    _ = shape")
-    write("    raise MissingMethod(self, 'broadcasting')\n")
+    write("def broadcast_to(self, shape: tuple[*Rest]) -> Pixels[*Rest]: ...\n")
+    write("def _broadcast_to_(self, shape: tuple[*Rest]) -> Pixels[*Rest]: ...\n")
 
     write(f"# broadcast\n")
     t = "Pixels[*Shape]"
@@ -240,12 +173,7 @@ def write_two_pix_methods(file = None):
     write(f"def __broadcast__(self: {t}, other: Pixels[*Shape]) -> tuple[{t}, {t}]: ...\n")
     write("@overload")
     write(f"def __broadcast__(self: Pixels[*Shape], other: {t}) -> tuple[{t}, {t}]: ...\n")
-    write(f"def __broadcast__(self: Pixels, other: Pixels | Scalar) -> tuple[Pixels, Pixels]:")
-    write(f"    cls = encoding(type(self), type(other))")
-    write(f"    a = encode_as(self, cls)")
-    write(f"    b = encode_as(other, cls)")
-    write(f"    s = broadcast_shapes(a.shape, b.shape)")
-    write(f"    return (a.broadcast_to(s), b.broadcast_to(s))\n")
+    write(f"def __broadcast__(self: Pixels, other: Pixels | Scalar) -> tuple[Pixels, Pixels]: ...\n")
 
     for (method, rmethod) in two_pix_methods:
         write(f"# {method[2:-2]}\n")
@@ -257,28 +185,18 @@ def write_two_pix_methods(file = None):
         t = "Pixels[*Shape]"
         write("@overload")
         write(f"def {method}(self: {t}, other: Scalar) -> {t}: ...\n")
-        write(f"def {method}(self: Pixels, other: Pixels | Scalar) -> Pixels:")
-        write(f"    a, b = self.__broadcast__(other)")
-        write(f"    result = a.{method[1:-1]}(b)")
-        write(f"    assert result.shape == a.shape")
-        write(f"    return result\n")
+        write(f"def {method}(self: Pixels, other: Pixels | Scalar) -> Pixels: ...\n")
         if rmethod and method != rmethod:
-            write(f"def {rmethod}(self: {t}, other: Scalar) -> {t}:")
-            write(f"    b, a = self.__broadcast__(other)")
-            write(f"    return a.{method[1:-1]}(b)\n")
+            write(f"def {rmethod}(self: {t}, other: Scalar) -> {t}: ...\n")
         if method == "__gt__":
-            write("def _gt_(self: Self, other: Self) -> Self:")
-            write("    return other._lt_(self)\n")
+            write("def _gt_(self: Self, other: Self) -> Self: ...\n")
         elif method == "__ge__":
-            write("def _ge_(self: Self, other: Self) -> Self:")
-            write("    return other._le_(self)\n")
+            write("def _ge_(self: Self, other: Self) -> Self: ...\n")
         else:
-            write(f"def {method[1:-1]}(self: Self, other: Self) -> Self:")
-            write(f"    _ = other")
-            write(f"    raise MissingMethod(self, '{method[2:-2]}ing')\n")
+            write(f"def {method[1:-1]}(self: Self, other: Self) -> Self: ...\n")
 
 
-def write_permute_methods(file = None):
+def write_permute_stubs(file = None):
     def write(string, **kwargs):
         print("    " + string, file=file, **kwargs)
 
@@ -304,22 +222,15 @@ def write_permute_methods(file = None):
         signature = "".join(f", i{i}: {indextype(p)}" for i, p in enumerate(variant)) + ", /"
         write("@overload")
         write(f"def permute(self: {selftype}{signature}) -> {result}: ...\n")
-    write(f"def permute(self, *permutation: int) -> Pixels:")
-    write(f"    permute_check_before(permutation, self.rank)")
-    write(f"    cls = encoding(type(self))")
-    write(f"    result = encode_as(self, cls)._permute_(permutation)")
-    write(f"    permute_check_after(permutation, self.shape, result.shape)")
-    write(f"    return result\n")
-    write(f"def _permute_(self, permutation: tuple[int, ...]) -> Pixels:")
-    write(f"    _ = permutation")
-    write(f"    raise MissingMethod(self, 'permuting')\n")
+    write(f"def permute(self, *permutation: int) -> Pixels: ...\n")
+    write(f"def _permute_(self, permutation: tuple[int, ...]) -> Pixels: ...\n")
 
 
 if __name__ == "__main__":
-    with open("pixels.py", "w") as f:
+    with open("pixels.pyi", "w") as f:
         write_file_header(f)
         write_class_header(f)
-        write_getitem_methods(f)
-        write_permute_methods(f)
-        write_one_pix_methods(f)
-        write_two_pix_methods(f)
+        write_getitem_stubs(f)
+        write_permute_stubs(f)
+        write_one_pix_stubs(f)
+        write_two_pix_stubs(f)

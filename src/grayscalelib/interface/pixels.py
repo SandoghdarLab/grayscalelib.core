@@ -1,22 +1,14 @@
-# This file was produced by generate.py.  Do not edit it by hand.
-
 from __future__ import annotations
 
 from abc import abstractmethod
 
 from types import EllipsisType
 
-from typing import Self, Generic, overload, Literal, TypeVar, TypeVarTuple
+from typing import Self, Generic, TypeVar, TypeVarTuple
 
 from encodable import choose_encoding, encode_as, Encodable
 
-from grayscalelib.interface.auxiliary import *
-
-A0 = TypeVar('A0')
-A1 = TypeVar('A1')
-A2 = TypeVar('A2')
-A3 = TypeVar('A3')
-A4 = TypeVar('A4')
+T = TypeVar('T')
 Shape = TypeVarTuple('Shape')
 Rest = TypeVarTuple('Rest')
 
@@ -50,10 +42,13 @@ class Pixels(Encodable, Generic[*Shape]):
     def rank(self) -> int:
         return len(self.shape)
 
-    def __len__(self: Pixels[A1, *tuple]) -> A1:
+    def __len__(self: Pixels[T, *tuple]) -> T:
         if len(self.shape) == 0:
             raise RuntimeError("A rank zero container has no length.")
         return self.shape[0]
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} shape={self.shape} precision={self.precision}>"
 
     @classmethod
     def zeros(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:
@@ -81,99 +76,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # getitem
 
-    @overload
-    def __getitem__(self: Pixels[*Rest], index: tuple[()]) -> Pixels[*Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, *Rest], index: tuple[int]) -> Pixels[*Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, *Rest], index: tuple[slice]) -> Pixels[A0, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, *Rest], index: tuple[int, int]) -> Pixels[*Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, *Rest], index: tuple[int, slice]) -> Pixels[A1, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, *Rest], index: tuple[slice, int]) -> Pixels[A0, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, *Rest], index: tuple[slice, slice]) -> Pixels[A0, A1, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, *Rest], index: tuple[int, int, int]) -> Pixels[*Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, *Rest], index: tuple[int, int, slice]) -> Pixels[A2, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, *Rest], index: tuple[int, slice, int]) -> Pixels[A1, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, *Rest], index: tuple[int, slice, slice]) -> Pixels[A1, A2, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, *Rest], index: tuple[slice, int, int]) -> Pixels[A0, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, *Rest], index: tuple[slice, int, slice]) -> Pixels[A0, A2, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, *Rest], index: tuple[slice, slice, int]) -> Pixels[A0, A1, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, *Rest], index: tuple[slice, slice, slice]) -> Pixels[A0, A1, A2, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[int, int, int, int]) -> Pixels[*Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[int, int, int, slice]) -> Pixels[A3, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[int, int, slice, int]) -> Pixels[A2, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[int, int, slice, slice]) -> Pixels[A2, A3, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[int, slice, int, int]) -> Pixels[A1, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[int, slice, int, slice]) -> Pixels[A1, A3, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[int, slice, slice, int]) -> Pixels[A1, A2, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[int, slice, slice, slice]) -> Pixels[A1, A2, A3, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[slice, int, int, int]) -> Pixels[A0, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[slice, int, int, slice]) -> Pixels[A0, A3, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[slice, int, slice, int]) -> Pixels[A0, A2, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[slice, int, slice, slice]) -> Pixels[A0, A2, A3, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[slice, slice, int, int]) -> Pixels[A0, A1, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[slice, slice, int, slice]) -> Pixels[A0, A1, A3, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[slice, slice, slice, int]) -> Pixels[A0, A1, A2, *Rest]: ...
-
-    @overload
-    def __getitem__(self: Pixels[A0, A1, A2, A3, *Rest], index: tuple[slice, slice, slice, slice]) -> Pixels[A0, A1, A2, A3, *Rest]: ...
-
     def __getitem__(self: Pixels, index: EllipsisType | int | slice | tuple[int | slice, ...]) -> Pixels:
         return self._getitem_(canonicalize_index(index, self.shape))
 
@@ -183,679 +85,31 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # permute
 
-    @overload
-    def permute(self: Pixels[()], /) -> Pixels[()]: ...
-
-    @overload
-    def permute(self: Pixels[A0], i0: int, /) -> Pixels[A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1], i0: Literal[0], i1: int, /) -> Pixels[A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1], i0: int, i1: Literal[0], /) -> Pixels[A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1], i0: Literal[1], i1: int, /) -> Pixels[A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1], i0: int, i1: Literal[1], /) -> Pixels[A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1], i0: int, i1: int, /) -> Pixels[A0 | A1, A0 | A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[2], i1: int, i2: Literal[1], /) -> Pixels[A2, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[0], i1: int, i2: Literal[2], /) -> Pixels[A0, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: Literal[0], i2: Literal[2], /) -> Pixels[A1, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[2], i1: Literal[0], i2: int, /) -> Pixels[A2, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[2], i1: int, i2: Literal[0], /) -> Pixels[A2, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: Literal[2], i2: Literal[1], /) -> Pixels[A0, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[0], i1: Literal[1], i2: int, /) -> Pixels[A0, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[0], i1: int, i2: Literal[1], /) -> Pixels[A0, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[0], i1: Literal[2], i2: int, /) -> Pixels[A0, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[1], i1: Literal[0], i2: int, /) -> Pixels[A1, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[1], i1: int, i2: Literal[0], /) -> Pixels[A1, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[1], i1: Literal[2], i2: int, /) -> Pixels[A1, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: Literal[0], i2: Literal[1], /) -> Pixels[A2, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[2], i1: Literal[1], i2: int, /) -> Pixels[A2, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[1], i1: int, i2: Literal[2], /) -> Pixels[A1, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: Literal[1], i2: Literal[0], /) -> Pixels[A2, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: Literal[1], i2: Literal[2], /) -> Pixels[A0, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: Literal[2], i2: Literal[0], /) -> Pixels[A1, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: Literal[0], i2: int, /) -> Pixels[A1 | A2, A0, A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: int, i2: Literal[0], /) -> Pixels[A1 | A2, A1 | A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: int, i2: Literal[2], /) -> Pixels[A0 | A1, A0 | A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[2], i1: int, i2: int, /) -> Pixels[A2, A0 | A1, A0 | A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: Literal[1], i2: int, /) -> Pixels[A0 | A2, A1, A0 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[1], i1: int, i2: int, /) -> Pixels[A1, A0 | A2, A0 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: int, i2: Literal[1], /) -> Pixels[A0 | A2, A0 | A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: Literal[2], i2: int, /) -> Pixels[A0 | A1, A2, A0 | A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: Literal[0], i1: int, i2: int, /) -> Pixels[A0, A1 | A2, A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2], i0: int, i1: int, i2: int, /) -> Pixels[A0 | A1 | A2, A0 | A1 | A2, A0 | A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: Literal[0], i3: Literal[3], /) -> Pixels[A2, A1, A0, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[3], i2: int, i3: Literal[2], /) -> Pixels[A0, A3, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: Literal[0], i3: Literal[2], /) -> Pixels[A3, A1, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: Literal[2], i3: Literal[0], /) -> Pixels[A3, A1, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: Literal[0], i3: Literal[1], /) -> Pixels[A3, A2, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[2], i2: Literal[3], i3: int, /) -> Pixels[A1, A2, A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[1], i2: Literal[2], i3: int, /) -> Pixels[A3, A1, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[2], i2: Literal[0], i3: int, /) -> Pixels[A3, A2, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: Literal[1], i3: Literal[2], /) -> Pixels[A0, A3, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: Literal[1], i3: Literal[0], /) -> Pixels[A3, A2, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: Literal[2], i3: Literal[3], /) -> Pixels[A0, A1, A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[2], i2: int, i3: Literal[0], /) -> Pixels[A3, A2, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: Literal[2], i3: Literal[1], /) -> Pixels[A3, A0, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[1], i2: int, i3: Literal[0], /) -> Pixels[A3, A1, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: Literal[0], i3: Literal[3], /) -> Pixels[A1, A2, A0, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[0], i2: Literal[3], i3: int, /) -> Pixels[A1, A0, A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[0], i2: int, i3: Literal[2], /) -> Pixels[A1, A0, A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: Literal[1], i3: Literal[2], /) -> Pixels[A3, A0, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[1], i2: int, i3: Literal[3], /) -> Pixels[A0, A1, A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[3], i2: Literal[0], i3: int, /) -> Pixels[A1, A3, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[2], i2: int, i3: Literal[1], /) -> Pixels[A0, A2, A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[2], i2: Literal[1], i3: int, /) -> Pixels[A3, A2, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[1], i2: int, i3: Literal[2], /) -> Pixels[A3, A1, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[3], i2: Literal[2], i3: int, /) -> Pixels[A1, A3, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: Literal[0], i3: Literal[1], /) -> Pixels[A2, A3, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: Literal[0], i3: Literal[2], /) -> Pixels[A1, A3, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[3], i2: Literal[1], i3: int, /) -> Pixels[A0, A3, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[2], i2: int, i3: Literal[3], /) -> Pixels[A0, A2, A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[0], i2: int, i3: Literal[3], /) -> Pixels[A2, A0, A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[1], i2: Literal[0], i3: int, /) -> Pixels[A3, A1, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: Literal[0], i3: Literal[1], /) -> Pixels[A2, A3, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: Literal[3], i3: Literal[0], /) -> Pixels[A1, A2, A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[1], i2: Literal[2], i3: int, /) -> Pixels[A0, A1, A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: Literal[0], i3: Literal[2], /) -> Pixels[A3, A1, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[1], i2: Literal[3], i3: int, /) -> Pixels[A2, A1, A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: Literal[0], i3: Literal[3], /) -> Pixels[A2, A1, A0, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: Literal[3], i3: Literal[1], /) -> Pixels[A0, A2, A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: Literal[2], i3: Literal[3], /) -> Pixels[A1, A0, A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: Literal[3], i3: Literal[2], /) -> Pixels[A1, A0, A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: Literal[3], i3: Literal[0], /) -> Pixels[A2, A1, A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: Literal[3], i3: Literal[1], /) -> Pixels[A0, A2, A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[0], i2: int, i3: Literal[2], /) -> Pixels[A3, A0, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: Literal[3], i3: Literal[2], /) -> Pixels[A0, A1, A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[3], i2: Literal[1], i3: int, /) -> Pixels[A2, A3, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[0], i2: Literal[1], i3: int, /) -> Pixels[A3, A0, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: Literal[1], i3: Literal[3], /) -> Pixels[A0, A2, A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: Literal[2], i3: Literal[1], /) -> Pixels[A3, A0, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: Literal[2], i3: Literal[0], /) -> Pixels[A1, A3, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: Literal[1], i3: Literal[2], /) -> Pixels[A3, A0, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[3], i2: int, i3: Literal[1], /) -> Pixels[A2, A3, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[3], i2: int, i3: Literal[1], /) -> Pixels[A0, A3, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: Literal[0], i3: Literal[1], /) -> Pixels[A3, A2, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: Literal[2], i3: Literal[3], /) -> Pixels[A1, A0, A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: Literal[3], i3: Literal[2], /) -> Pixels[A1, A0, A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[2], i2: Literal[0], i3: int, /) -> Pixels[A1, A2, A0, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: Literal[0], i3: Literal[3], /) -> Pixels[A1, A2, A0, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: Literal[2], i3: Literal[0], /) -> Pixels[A1, A3, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: Literal[3], i3: Literal[1], /) -> Pixels[A2, A0, A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: Literal[2], i3: Literal[0], /) -> Pixels[A3, A1, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: Literal[1], i3: Literal[3], /) -> Pixels[A2, A0, A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: Literal[2], i3: Literal[1], /) -> Pixels[A0, A3, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: Literal[1], i3: Literal[3], /) -> Pixels[A0, A2, A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[2], i2: int, i3: Literal[3], /) -> Pixels[A1, A2, A0, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[1], i2: int, i3: Literal[2], /) -> Pixels[A0, A1, A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[1], i2: Literal[3], i3: int, /) -> Pixels[A0, A1, A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[3], i2: int, i3: Literal[0], /) -> Pixels[A1, A3, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[1], i2: int, i3: Literal[3], /) -> Pixels[A2, A1, A0, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[2], i2: int, i3: Literal[1], /) -> Pixels[A3, A2, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: Literal[1], i3: Literal[0], /) -> Pixels[A3, A2, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[0], i2: Literal[2], i3: int, /) -> Pixels[A1, A0, A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: Literal[2], i3: Literal[3], /) -> Pixels[A0, A1, A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[2], i2: Literal[1], i3: int, /) -> Pixels[A0, A2, A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[0], i2: Literal[1], i3: int, /) -> Pixels[A2, A0, A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[0], i2: int, i3: Literal[3], /) -> Pixels[A1, A0, A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: Literal[3], i3: Literal[2], /) -> Pixels[A0, A1, A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: Literal[3], i3: Literal[0], /) -> Pixels[A1, A2, A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[3], i2: int, i3: Literal[2], /) -> Pixels[A1, A3, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[0], i2: int, i3: Literal[1], /) -> Pixels[A3, A0, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[2], i2: Literal[3], i3: int, /) -> Pixels[A0, A2, A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[0], i2: Literal[3], i3: int, /) -> Pixels[A2, A0, A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[3], i2: Literal[2], i3: int, /) -> Pixels[A0, A3, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: Literal[0], i3: Literal[2], /) -> Pixels[A1, A3, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[0], i2: Literal[2], i3: int, /) -> Pixels[A3, A0, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[3], i2: Literal[0], i3: int, /) -> Pixels[A2, A3, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[0], i2: int, i3: Literal[1], /) -> Pixels[A2, A0, A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: Literal[1], i3: Literal[0], /) -> Pixels[A2, A3, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[3], i2: int, i3: Literal[0], /) -> Pixels[A2, A3, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: Literal[3], i3: Literal[1], /) -> Pixels[A2, A0, A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: Literal[1], i3: Literal[0], /) -> Pixels[A2, A3, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: Literal[2], i3: Literal[1], /) -> Pixels[A0, A3, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[2], i2: int, i3: Literal[0], /) -> Pixels[A1, A2, A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[1], i2: Literal[0], i3: int, /) -> Pixels[A2, A1, A0, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: Literal[1], i3: Literal[3], /) -> Pixels[A2, A0, A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[1], i2: int, i3: Literal[0], /) -> Pixels[A2, A1, A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: Literal[3], i3: Literal[0], /) -> Pixels[A2, A1, A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: Literal[1], i3: Literal[2], /) -> Pixels[A0, A3, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[1], i2: int, i3: int, /) -> Pixels[A3, A1, A0 | A2, A0 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[3], i3: Literal[1], /) -> Pixels[A0 | A2, A0 | A2, A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: int, i3: Literal[3], /) -> Pixels[A0, A1 | A2, A1 | A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: int, i3: Literal[1], /) -> Pixels[A0 | A3, A2, A0 | A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[1], i3: Literal[3], /) -> Pixels[A0 | A2, A0 | A2, A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: int, i3: Literal[2], /) -> Pixels[A0 | A3, A1, A0 | A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[0], i2: int, i3: int, /) -> Pixels[A3, A0, A1 | A2, A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: int, i3: Literal[3], /) -> Pixels[A0 | A1, A2, A0 | A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: Literal[1], i3: int, /) -> Pixels[A2 | A3, A0, A1, A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: Literal[0], i3: int, /) -> Pixels[A2 | A3, A1, A0, A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: Literal[3], i3: int, /) -> Pixels[A1 | A2, A0, A3, A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[2], i3: Literal[0], /) -> Pixels[A1 | A3, A1 | A3, A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: Literal[2], i3: int, /) -> Pixels[A0 | A1, A3, A2, A0 | A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: Literal[2], i3: int, /) -> Pixels[A0, A1 | A3, A2, A1 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[0], i3: Literal[2], /) -> Pixels[A1 | A3, A1 | A3, A0, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: int, i3: Literal[1], /) -> Pixels[A2, A0 | A3, A0 | A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: Literal[0], i3: int, /) -> Pixels[A1 | A3, A2, A0, A1 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: int, i3: Literal[1], /) -> Pixels[A3, A0 | A2, A0 | A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[1], i2: int, i3: int, /) -> Pixels[A0, A1, A2 | A3, A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: int, i3: Literal[3], /) -> Pixels[A2, A0 | A1, A0 | A1, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: Literal[3], i3: int, /) -> Pixels[A0 | A2, A1, A3, A0 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: int, i3: Literal[2], /) -> Pixels[A0, A1 | A3, A1 | A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: int, i3: Literal[0], /) -> Pixels[A1 | A3, A2, A1 | A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[2], i2: int, i3: int, /) -> Pixels[A0, A2, A1 | A3, A1 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: int, i3: Literal[2], /) -> Pixels[A1 | A3, A0, A1 | A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[3], i2: int, i3: int, /) -> Pixels[A1, A3, A0 | A2, A0 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[0], i2: int, i3: int, /) -> Pixels[A2, A0, A1 | A3, A1 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: Literal[0], i3: int, /) -> Pixels[A2, A1 | A3, A0, A1 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: int, i3: Literal[0], /) -> Pixels[A1 | A2, A3, A1 | A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: Literal[2], i3: int, /) -> Pixels[A1, A0 | A3, A2, A0 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[0], i3: Literal[1], /) -> Pixels[A2 | A3, A2 | A3, A0, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: int, i3: Literal[0], /) -> Pixels[A2, A1 | A3, A1 | A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[1], i3: Literal[0], /) -> Pixels[A2 | A3, A2 | A3, A1, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: Literal[1], i3: int, /) -> Pixels[A0 | A2, A3, A1, A0 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: int, i3: Literal[3], /) -> Pixels[A1, A0 | A2, A0 | A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[2], i3: Literal[1], /) -> Pixels[A0 | A3, A0 | A3, A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: Literal[2], i3: int, /) -> Pixels[A3, A0 | A1, A2, A0 | A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[3], i3: Literal[0], /) -> Pixels[A1 | A2, A1 | A2, A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: int, i3: Literal[2], /) -> Pixels[A0 | A1, A3, A0 | A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: Literal[3], i3: int, /) -> Pixels[A0, A1 | A2, A3, A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[1], i3: Literal[2], /) -> Pixels[A0 | A3, A0 | A3, A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[0], i3: Literal[3], /) -> Pixels[A1 | A2, A1 | A2, A0, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: Literal[1], i3: int, /) -> Pixels[A0 | A3, A2, A1, A0 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[2], i3: Literal[3], /) -> Pixels[A0 | A1, A0 | A1, A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[3], i3: Literal[2], /) -> Pixels[A0 | A1, A0 | A1, A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: Literal[0], i3: int, /) -> Pixels[A1 | A2, A3, A0, A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: Literal[3], i3: int, /) -> Pixels[A0 | A1, A2, A3, A0 | A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: int, i3: Literal[1], /) -> Pixels[A2 | A3, A0, A2 | A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: int, i3: Literal[3], /) -> Pixels[A0 | A2, A1, A0 | A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: Literal[2], i3: int, /) -> Pixels[A1 | A3, A0, A2, A1 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: Literal[0], i3: int, /) -> Pixels[A1, A2 | A3, A0, A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: int, i3: Literal[3], /) -> Pixels[A1 | A2, A0, A1 | A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: int, i3: Literal[0], /) -> Pixels[A1, A2 | A3, A2 | A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: Literal[3], i2: int, i3: int, /) -> Pixels[A0, A3, A1 | A2, A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[3], i2: int, i3: int, /) -> Pixels[A2, A3, A0 | A1, A0 | A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: Literal[0], i3: int, /) -> Pixels[A3, A1 | A2, A0, A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: Literal[1], i3: int, /) -> Pixels[A2, A0 | A3, A1, A0 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: Literal[1], i3: int, /) -> Pixels[A0, A2 | A3, A1, A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[2], i2: int, i3: int, /) -> Pixels[A1, A2, A0 | A3, A0 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: int, i3: Literal[0], /) -> Pixels[A3, A1 | A2, A1 | A2, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: Literal[1], i2: int, i3: int, /) -> Pixels[A2, A1, A0 | A3, A0 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: Literal[3], i3: int, /) -> Pixels[A2, A0 | A1, A3, A0 | A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: int, i3: Literal[2], /) -> Pixels[A1, A0 | A3, A0 | A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: Literal[2], i3: int, /) -> Pixels[A0 | A3, A1, A2, A0 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: int, i3: Literal[1], /) -> Pixels[A0 | A2, A3, A0 | A2, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: int, i3: Literal[1], /) -> Pixels[A0, A2 | A3, A2 | A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: Literal[0], i2: int, i3: int, /) -> Pixels[A1, A0, A2 | A3, A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: int, i3: Literal[2], /) -> Pixels[A3, A0 | A1, A0 | A1, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: Literal[3], i3: int, /) -> Pixels[A1, A0 | A2, A3, A0 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: Literal[1], i3: int, /) -> Pixels[A3, A0 | A2, A1, A0 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: int, i3: Literal[0], /) -> Pixels[A2 | A3, A1, A2 | A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: Literal[2], i2: int, i3: int, /) -> Pixels[A3, A2, A0 | A1, A0 | A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: int, i3: Literal[0], /) -> Pixels[A1 | A2 | A3, A1 | A2 | A3, A1 | A2 | A3, A0]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[0], i1: int, i2: int, i3: int, /) -> Pixels[A0, A1 | A2 | A3, A1 | A2 | A3, A1 | A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[1], i3: int, /) -> Pixels[A0 | A2 | A3, A0 | A2 | A3, A1, A0 | A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: int, i3: Literal[2], /) -> Pixels[A0 | A1 | A3, A0 | A1 | A3, A0 | A1 | A3, A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[2], i2: int, i3: int, /) -> Pixels[A0 | A1 | A3, A2, A0 | A1 | A3, A0 | A1 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[3], i2: int, i3: int, /) -> Pixels[A0 | A1 | A2, A3, A0 | A1 | A2, A0 | A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[2], i1: int, i2: int, i3: int, /) -> Pixels[A2, A0 | A1 | A3, A0 | A1 | A3, A0 | A1 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[3], i3: int, /) -> Pixels[A0 | A1 | A2, A0 | A1 | A2, A3, A0 | A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: int, i3: Literal[1], /) -> Pixels[A0 | A2 | A3, A0 | A2 | A3, A0 | A2 | A3, A1]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[1], i1: int, i2: int, i3: int, /) -> Pixels[A1, A0 | A2 | A3, A0 | A2 | A3, A0 | A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[0], i3: int, /) -> Pixels[A1 | A2 | A3, A1 | A2 | A3, A0, A1 | A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: Literal[3], i1: int, i2: int, i3: int, /) -> Pixels[A3, A0 | A1 | A2, A0 | A1 | A2, A0 | A1 | A2]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: Literal[2], i3: int, /) -> Pixels[A0 | A1 | A3, A0 | A1 | A3, A2, A0 | A1 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[1], i2: int, i3: int, /) -> Pixels[A0 | A2 | A3, A1, A0 | A2 | A3, A0 | A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: int, i3: Literal[3], /) -> Pixels[A0 | A1 | A2, A0 | A1 | A2, A0 | A1 | A2, A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: Literal[0], i2: int, i3: int, /) -> Pixels[A1 | A2 | A3, A0, A1 | A2 | A3, A1 | A2 | A3]: ...
-
-    @overload
-    def permute(self: Pixels[A0, A1, A2, A3], i0: int, i1: int, i2: int, i3: int, /) -> Pixels[A0 | A1 | A2 | A3, A0 | A1 | A2 | A3, A0 | A1 | A2 | A3, A0 | A1 | A2 | A3]: ...
-
     def permute(self, *permutation: int) -> Pixels:
-        permute_check_before(permutation, self.rank)
+        rank = self.rank
+        if not isinstance(permutation, tuple):
+            raise TypeError(f"A permutation must be a tuple, not a {type(permutation)}.")
+        if not len(permutation) == rank:
+            raise ValueError(f"Invalid permutation {permutation} for data of rank {rank}.")
+        for i, p in enumerate(permutation):
+            if not isinstance(p, int):
+                raise TypeError(f"The permutation entry {p} is not an integer.")
+            if not 0 <= p < rank:
+                raise ValueError(f"Invalid permutation entry {p} for data of rank {rank}.")
+            if p in permutation[:i]:
+                raise ValueError(f"Duplicate entry {p} in permutation {permutation}.")
         cls = encoding(type(self))
         result = encode_as(self, cls)._permute_(permutation)
-        permute_check_after(permutation, self.shape, result.shape)
+        oldshape = self.shape
+        newshape = result.shape
+        assert len(permutation) == len(oldshape) == len(newshape)
+        for i, p in enumerate(permutation):
+            assert newshape[i] == oldshape[p]
         return result
 
     def _permute_(self, permutation: tuple[int, ...]) -> Pixels:
         _ = permutation
         raise MissingMethod(self, 'permuting')
-
-    def __repr__(self) -> str:
-        return f"<{type(self).__name__} shape={self.shape} precision={self.precision}>"
 
     # bool
 
@@ -980,15 +234,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # broadcast
 
-    @overload
-    def __broadcast__(self: Pixels[*Shape], other: Scalar) -> tuple[Pixels[*Shape], Pixels[*Shape]]: ...
-
-    @overload
-    def __broadcast__(self: Pixels[*Shape, A1, *Rest], other: Pixels[*Shape]) -> tuple[Pixels[*Shape, A1, *Rest], Pixels[*Shape, A1, *Rest]]: ...
-
-    @overload
-    def __broadcast__(self: Pixels[*Shape], other: Pixels[*Shape, A1, *Rest]) -> tuple[Pixels[*Shape, A1, *Rest], Pixels[*Shape, A1, *Rest]]: ...
-
     def __broadcast__(self: Pixels, other: Pixels | Scalar) -> tuple[Pixels, Pixels]:
         cls = encoding(type(self), type(other))
         a = encode_as(self, cls)
@@ -997,15 +242,6 @@ class Pixels(Encodable, Generic[*Shape]):
         return (a.broadcast_to(s), b.broadcast_to(s))
 
     # add
-
-    @overload
-    def __add__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __add__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __add__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
 
     def __add__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
@@ -1023,15 +259,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # and
 
-    @overload
-    def __and__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __and__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __and__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
-
     def __and__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
         result = a._and_(b)
@@ -1047,15 +274,6 @@ class Pixels(Encodable, Generic[*Shape]):
         raise MissingMethod(self, 'anding')
 
     # floordiv
-
-    @overload
-    def __floordiv__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __floordiv__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __floordiv__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
 
     def __floordiv__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
@@ -1073,15 +291,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # mod
 
-    @overload
-    def __mod__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __mod__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __mod__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
-
     def __mod__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
         result = a._mod_(b)
@@ -1097,15 +306,6 @@ class Pixels(Encodable, Generic[*Shape]):
         raise MissingMethod(self, 'moding')
 
     # mul
-
-    @overload
-    def __mul__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __mul__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __mul__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
 
     def __mul__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
@@ -1123,15 +323,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # or
 
-    @overload
-    def __or__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __or__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __or__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
-
     def __or__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
         result = a._or_(b)
@@ -1147,15 +338,6 @@ class Pixels(Encodable, Generic[*Shape]):
         raise MissingMethod(self, 'oring')
 
     # sub
-
-    @overload
-    def __sub__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __sub__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __sub__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
 
     def __sub__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
@@ -1173,15 +355,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # truediv
 
-    @overload
-    def __truediv__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __truediv__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __truediv__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
-
     def __truediv__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
         result = a._truediv_(b)
@@ -1197,15 +370,6 @@ class Pixels(Encodable, Generic[*Shape]):
         raise MissingMethod(self, 'truediving')
 
     # xor
-
-    @overload
-    def __xor__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __xor__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __xor__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
 
     def __xor__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
@@ -1223,15 +387,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # lt
 
-    @overload
-    def __lt__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __lt__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __lt__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
-
     def __lt__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
         result = a._lt_(b)
@@ -1244,15 +399,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # gt
 
-    @overload
-    def __gt__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __gt__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __gt__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
-
     def __gt__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
         result = a._gt_(b)
@@ -1263,15 +409,6 @@ class Pixels(Encodable, Generic[*Shape]):
         return other._lt_(self)
 
     # le
-
-    @overload
-    def __le__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __le__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __le__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
 
     def __le__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
@@ -1285,15 +422,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # ge
 
-    @overload
-    def __ge__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __ge__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __ge__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
-
     def __ge__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
         result = a._ge_(b)
@@ -1305,15 +433,6 @@ class Pixels(Encodable, Generic[*Shape]):
 
     # eq
 
-    @overload
-    def __eq__(self: Pixels[*Shape, A0, *Rest], other: Pixels[*Shape]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __eq__(self: Pixels[*Shape], other: Pixels[*Shape, A0, *Rest]) -> Pixels[*Shape, A0, *Rest]: ...
-
-    @overload
-    def __eq__(self: Pixels[*Shape], other: Scalar) -> Pixels[*Shape]: ...
-
     def __eq__(self: Pixels, other: Pixels | Scalar) -> Pixels:
         a, b = self.__broadcast__(other)
         result = a._eq_(b)
@@ -1324,3 +443,67 @@ class Pixels(Encodable, Generic[*Shape]):
         _ = other
         raise MissingMethod(self, 'eqing')
 
+
+def MissingMethod(self, action) -> TypeError:
+    return TypeError(f"No method for {action} objects of type {type(self)}.")
+
+def MissingClassmethod(cls, action) -> TypeError:
+    return TypeError(f"No classmethod for {action} of type {cls}.")
+
+
+def canonicalize_index(index, shape: tuple) -> tuple[int | slice, ...]:
+    # Step 1 - Convert the index into a tuple.
+    ituple : tuple
+    if index == ...:
+        ituple = tuple(slice(None) for _ in shape)
+    elif isinstance(index, int) or isinstance(index, slice):
+        ituple = (index,)
+    elif isinstance(index, tuple):
+        ituple = index
+    else:
+        raise TypeError(f"Invalid index {index}.")
+    # Step 2 - Ensure that ituple and shape have the same length.
+    ni = len(ituple)
+    ns = len(shape)
+    if ni < ns:
+        ituple += tuple(slice(None) for _ in range(ns - ni))
+    elif ni > ns:
+        raise ValueError(f"Too many indices for shape {shape}.")
+    # Step 3 - Ensure that all entries are well formed.
+    for entry, size in zip(ituple, shape):
+        if isinstance(entry, int):
+            if not (-size <= entry < size):
+                raise IndexError(f"Index {entry} out of range for axis with size {size}.")
+        elif isinstance(entry, slice):
+            # Python treats out-of-bounds slices as empty, so any slice is
+            # valid for any size.
+            pass
+        else:
+            raise TypeError(f"Invalid index component {entry}.")
+    return ituple
+
+
+def broadcast_shapes(shape1: tuple, shape2: tuple) -> tuple:
+    """Broadcast the two supplied shapes or raise an error."""
+    rank1 = len(shape1)
+    rank2 = len(shape2)
+    # Ensure shape1 has higher rank.
+    if rank1 < rank2:
+        shape1, shape2 = shape2, shape1
+        rank1, rank2 = rank2, rank1
+
+    def broadcast_axis(axis) -> int:
+        dim1 = shape1[axis]
+        dim2 = shape2[axis]
+        if dim1 == dim2:
+            return dim1
+        elif dim1 == 0 or dim2 == 0:
+            raise ValueError(f"Cannot broadcast axis {axis} with size zero.")
+        elif dim1 == 1:
+            return dim2
+        elif dim2 == 1:
+            return dim1
+        else:
+            raise ValueError(f"Cannot broadcast axis {axis} with incompatible size.")
+
+    return tuple(broadcast_axis(axis) for axis in range(rank2)) + shape1[rank2:]
