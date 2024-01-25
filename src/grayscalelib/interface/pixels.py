@@ -58,6 +58,22 @@ class Pixels(Encodable, Generic[*Shape]):
         return f"<{type(self).__name__} shape={self.shape} precision={self.precision}>"
 
     @classmethod
+    def from_float(cls, value: float, /, precision: int = 54) -> Pixels[()]:
+        """The supplied float, clipped to [0, 1], and represented as pixel."""
+        if precision <= 0:
+            raise ValueError(f"Invalid precision: {precision}")
+        result = cls._from_float_(max(0.0, min(value, 1.0)), precision=precision)
+        assert result.shape == ()
+        assert result.precision == precision
+        return result
+
+    @classmethod
+    def _from_float_(cls, /, value: float, precision: int) -> Pixels[()]:
+        """The supplied float, clipped to [0, 1], and represented as pixel."""
+        _, _ = value, precision
+        raise MissingClassmethod(cls, "creating constants")
+
+    @classmethod
     def zeros(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:
         """A container of all zeros of the supplied shape."""
         result = cls._zeros_(shape)
@@ -68,7 +84,7 @@ class Pixels(Encodable, Generic[*Shape]):
     @classmethod
     def _zeros_(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:
         _ = shape
-        raise MissingClassmethod(cls, "creating zeros")
+        return cls.from_float(0.0, precision=1).broadcast_to(shape)
 
     @classmethod
     def ones(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:
@@ -81,7 +97,7 @@ class Pixels(Encodable, Generic[*Shape]):
     @classmethod
     def _ones_(cls, shape: tuple[*Rest]) -> Pixels[*Rest]:
         _ = shape
-        raise MissingClassmethod(cls, "creating ones")
+        return cls.from_float(1.0, precision=1).broadcast_to(shape)
 
     # getitem
 
