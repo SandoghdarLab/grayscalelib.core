@@ -1,6 +1,6 @@
 [project]
-name = "grayscalelib.interface"
-description = "An abstract interface for manipulating grayscale data."
+name = "grayscalelib.core"
+description = "A protocol for manipulating grayscale data."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [

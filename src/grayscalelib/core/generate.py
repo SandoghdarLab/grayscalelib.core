@@ -75,7 +75,7 @@ def write_file_header(file = None):
     write("from types import EllipsisType\n")
     write("from typing import Self, Generic, overload, Literal, TypeVar, TypeVarTuple\n")
     write("from encodable import choose_encoding, encode_as, Encodable\n")
-    write("from grayscalelib.interface.auxiliary import *\n")
+    write("from grayscalelib.core.auxiliary import *\n")
     for axis in axes:
         write(f"{axis} = TypeVar('{axis}')")
     write(f"Shape = TypeVarTuple('Shape')")

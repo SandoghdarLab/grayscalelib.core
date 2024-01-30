@@ -551,6 +551,7 @@ def broadcast_shapes(shape1: tuple, shape2: tuple) -> tuple:
         shape1, shape2 = shape2, shape1
         rank1, rank2 = rank2, rank1
 
+    # TODO rework broadcasting
     def broadcast_axis(axis) -> int:
         dim1 = shape1[axis]
         dim2 = shape2[axis]
