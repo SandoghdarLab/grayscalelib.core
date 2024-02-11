@@ -1,3 +1,11 @@
-from grayscalelib.core.pixels import Pixels, fallback_encoding
+from grayscalelib.core.pixels import Pixels, default_pixels_type, pixels_type, set_default_pixels_type
+from grayscalelib.core.simplepixels import SimplePixels
 
-__all__ = ["Pixels", "fallback_encoding"]
+
+__all__ = [
+    "Pixels",
+    "default_pixels_type",
+    "pixels_type",
+    "set_default_pixels_type",
+    "SimplePixels",
+]
