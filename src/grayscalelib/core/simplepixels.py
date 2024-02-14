@@ -35,11 +35,12 @@ class SimplePixels(Pixels):
             fbits: int,
             scale: RealLike,
             offset: RealLike,
-            maxval: RealLike):
+            maxval: int):
         shape = array.shape
         values: list[int] = []
         for index in itertools.product(*tuple(range(n) for n in shape)):
             value = max(0, min(round(array[*index] * scale + offset), maxval))
+            assert isinstance(value, int)
             values.append(value)
         self._shape = shape
         self._ibits = ibits

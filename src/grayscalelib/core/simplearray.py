@@ -59,6 +59,10 @@ class SimpleArray(ArrayLike, Generic[T]):
         return f"SimpleArray({listify((), self.shape)})"
 
     def __getitem__(self, subscripts) -> T | SimpleArray[T]:
+        if subscripts == ...:
+            subscripts = ()
+        if not isinstance(subscripts, tuple):
+            subscripts = (subscripts,)
         old_shape = self.shape
         old_values: list[T] = self._values
         old_strides = self.strides
@@ -67,23 +71,25 @@ class SimpleArray(ArrayLike, Generic[T]):
         assert nsubscripts <= old_rank
         # Compute the iteration space.
         ranges: list[range] = []
-        slicep: list[bool] = []
+        sizes: list[int] = []
         for index, size, stride in zip(subscripts, old_shape, old_strides):
             if isinstance(index, int):
                 if not (0 <= index < size):
                     raise IndexError(f"Out-of-bounds index {index} for axis of size {size}.")
                 pos = index * stride
                 ranges.append(range(pos, pos+1))
-                slicep.append(False)
             if isinstance(index, slice):
                 start, stop, step = index.indices(size)
-                ranges.append(range(start * stride, stop * stride, step * stride))
-                slicep.append(True)
+                rstart = start * stride
+                rstop = stop * stride
+                rstep = 1 if stride == 0 else step * stride
+                ranges.append(range(rstart, rstop, rstep))
+                sizes.append(len(range(start, stop, step)))
         for size, stride in zip(old_shape[nsubscripts:], old_strides[nsubscripts:]):
-            ranges.append(range(0, size * stride, stride))
-            slicep.append(True)
+            ranges.append(range(0, size * stride, 1 if stride == 0 else stride))
+            sizes.append(size)
         # Derive the new shape and new values from the iteration space.
-        new_shape = tuple(len(r) for r, s in zip(ranges, slicep) if s)
+        new_shape = tuple(sizes)
         new_values: list[T] = []
         for parts in product(*ranges):
             new_values.append(old_values[sum(parts)])

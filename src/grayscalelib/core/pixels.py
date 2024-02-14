@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 from fractions import Fraction
 
-from math import floor, gcd
+from math import floor
 
 from types import EllipsisType
 
@@ -152,16 +152,16 @@ class Pixels(Encodable):
             raise ValueError("Black must be less than or equal to limit.")
         delta = (white - black)
         if ibits is None:
-            ibits = 0 if delta == 0 else floor((limit - black) / delta).bit_count()
+            ibits = 0 if delta == 0 else floor((limit - black) / delta).bit_length()
         if ibits < 0:
             raise ValueError("The number of integer bits must be non-negative.")
         if fbits is None:
             fbits = _default_fbits
         if fbits < 0:
             raise ValueError("The number of fractional bits must be non-negative.")
-        scale = divide_accurately((1 << fbits), delta)
+        scale = 0 if delta == 0 else divide_accurately((1 << fbits), delta)
         offset = -1 * black * scale
-        maxval = min(limit * scale + offset, (1 << (ibits + fbits)) - 1)
+        maxval = min(round(limit * scale + offset), (1 << (ibits + fbits)) - 1)
         array = coerce_to_array(data)
         self._init_(array, ibits, fbits, scale, offset, maxval)
         # Ensure the container was initialized correctly.
@@ -183,7 +183,7 @@ class Pixels(Encodable):
             fbits: int,
             scale: RealLike,
             offset: RealLike,
-            maxval: RealLike):
+            maxval: int):
         """
         Initialize the supplied pixels based on the supplied parameters.
 
