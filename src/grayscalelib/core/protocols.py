@@ -24,6 +24,9 @@ class RealLike(Protocol):
     def __float__(self) -> float:
         ...
 
+    def as_integer_ratio(self) -> tuple[int, int]:
+        ...
+
     def __round__(self) -> int:
         ...
 
@@ -34,6 +37,9 @@ class RealLike(Protocol):
         ...
 
     def __trunc__(self) -> int:
+        ...
+
+    def __neg__(self) -> RealLike:
         ...
 
     def __add__(self, other, /) -> RealLike:

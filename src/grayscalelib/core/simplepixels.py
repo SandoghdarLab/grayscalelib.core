@@ -31,16 +31,23 @@ class SimplePixels(Pixels):
     def _init_(
             self,
             array: ArrayLike,
+            black: RealLike,
+            white: RealLike,
+            limit: RealLike,
             ibits: int,
-            fbits: int,
-            scale: RealLike,
-            offset: RealLike,
-            maxval: int):
+            fbits: int):
         shape = array.shape
         values: list[int] = []
+        delta = white - black
+        n, d = delta.as_integer_ratio()
+        mul = (2 << fbits) * d
+        div = 1 if n == 0 else 2 * n
         for index in itertools.product(*tuple(range(n) for n in shape)):
-            value = max(0, min(round(array[*index] * scale + offset), maxval))
+            normed = max(0, min(array[index] - black, limit - black))
+            value = math.floor((normed * mul + delta) / div)
             assert isinstance(value, int)
+            assert 0 <= value
+            assert value < (1 << (ibits + fbits))
             values.append(value)
         self._shape = shape
         self._ibits = ibits

@@ -14,6 +14,10 @@ def pixels_subclass(request):
 
 
 def test_init(pixels_subclass):
+    # Check some trivial cases.
+    assert Pixels(0, fbits=0, ibits=0).to_array()[()] == 0
+    assert Pixels(1, fbits=0).to_array()[()] == 1
+    assert Pixels(0.5, fbits=0).to_array()[()] == 1
     # Ensure that shapes are computed correctly.
     assert Pixels(0).shape == ()
     assert Pixels([]).shape == (0,)
@@ -35,6 +39,8 @@ def test_init(pixels_subclass):
     # Check that black, white, and limit are correctly accounted for.
     for fbits, black in product([0, 1, 2], range(-3, 3)):
         for white, limit in product(range(black, black+3), range(black, black+9)):
+            if black == white and white != limit:
+                continue
             delta = (white - black)
             data = [[black-1, black, black+1],
                     [white-1, white, white+1],
@@ -44,14 +50,15 @@ def test_init(pixels_subclass):
             for i, j in product(*tuple(range(s) for s in px.shape)):
                 expected = black if delta == 0 else max(black, min(data[i][j], limit))
                 restored = ((numerators[i, j] * delta) >> fbits) + black
-                assert black <= restored <= limit
+                assert black <= restored <= limit + delta / 2
                 assert abs(restored - expected) <= delta
     # Ensure that the ibits are computed correctly.
     for white in range(1, 5):
         for limit in range(white, 17):
             data = list(range(-1, limit+1))
             px = Pixels(data, fbits=0, white=white, limit=limit)
-            assert px.ibits == (limit // white).bit_length()
+            bound = math.floor((limit * 2 + white) / (2 * white))
+            assert px.ibits == bound.bit_length()
 
 
 def test_getitem(pixels_subclass):
@@ -141,7 +148,7 @@ def test_permute(pixels_subclass):
                 assert array[index] == flipped2[other]
 
 
-def test_broadcast_to(pixels_subclass):
+def test_nroadcast_to(pixels_subclass):
     for shape in chain(*[permutations((0, 5, 7), k) for k in range(3)]):
         size = math.prod(shape)
         data = list(range(size))
@@ -157,8 +164,8 @@ def test_broadcast_to(pixels_subclass):
 
 
 def test_bool(pixels_subclass):
-    for true, false in zip((Pixels(1), Pixels([1, 1])),
-                           (Pixels(0), Pixels([0, 0]))):
+    for true, false in zip((Pixels(1), Pixels([1, 1]), Pixels([[1, 1], [1, 1]])),
+                           (Pixels(0), Pixels([0, 0]), Pixels([[0, 0], [0, 0]]))):
         assert isinstance(true, pixels_subclass)
         assert isinstance(false, pixels_subclass)
         # bool
@@ -181,3 +188,7 @@ def test_bool(pixels_subclass):
         assert (true ^ false)
         assert (false ^ true)
         assert not (false ^ false)
+    # Ensure that Pixels are true if any element is non-zero.
+    assert Pixels([[[1, 0]]])
+    assert Pixels([[[0.5, 0]]], fbits=1)
+    assert Pixels([[[0.5, 0]]], fbits=0)

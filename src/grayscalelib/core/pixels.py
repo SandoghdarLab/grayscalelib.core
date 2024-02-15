@@ -150,20 +150,20 @@ class Pixels(Encodable):
             raise ValueError("Black must be less than or equal to white.")
         if not (black <= limit):
             raise ValueError("Black must be less than or equal to limit.")
-        delta = (white - black)
+        if (black == white) and (white != limit):
+            raise ValueError("Cannot set explicit limit when black equals white.")
         if ibits is None:
-            ibits = 0 if delta == 0 else floor((limit - black) / delta).bit_length()
+            delta = white - black
+            bound = 0 if delta == 0 else floor(((limit - black) * 2 + delta) / (2 * delta))
+            ibits = bound.bit_length()
         if ibits < 0:
             raise ValueError("The number of integer bits must be non-negative.")
         if fbits is None:
             fbits = _default_fbits
         if fbits < 0:
             raise ValueError("The number of fractional bits must be non-negative.")
-        scale = 0 if delta == 0 else divide_accurately((1 << fbits), delta)
-        offset = -1 * black * scale
-        maxval = min(round(limit * scale + offset), (1 << (ibits + fbits)) - 1)
         array = coerce_to_array(data)
-        self._init_(array, ibits, fbits, scale, offset, maxval)
+        self._init_(array, black, white, limit, ibits, fbits)
         # Ensure the container was initialized correctly.
         assert self.ibits == ibits
         assert self.fbits == fbits
@@ -179,11 +179,11 @@ class Pixels(Encodable):
     def _init_(
             self,
             array: ArrayLike,
+            black: RealLike,
+            white: RealLike,
+            limit: RealLike,
             ibits: int,
-            fbits: int,
-            scale: RealLike,
-            offset: RealLike,
-            maxval: int):
+            fbits: int):
         """
         Initialize the supplied pixels based on the supplied parameters.
 
