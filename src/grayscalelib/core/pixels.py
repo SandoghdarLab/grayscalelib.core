@@ -351,24 +351,6 @@ class Pixels(Encodable):
     def _bool_(self) -> bool:
         raise MissingMethod(self, "determining the truth of")
 
-    # not
-
-    def __not__(self) -> Pixels:
-        """
-        One wherever the supplied container is zero, and zero otherwise.
-
-        The resulting container has one integer bit, and zero fractional bits.
-        """
-        cls = encoding(type(self))
-        result = encode_as(self, cls)._not_()
-        assert result.shape == self.shape
-        assert result.fbits == 0
-        assert result.ibits == 1
-        return result
-
-    def _not_(self: Self) -> Self:
-        raise MissingMethod(self, "logically negating")
-
     # and
 
     def __and__(self, other) -> Pixels:

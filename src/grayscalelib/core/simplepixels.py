@@ -108,19 +108,12 @@ class SimplePixels(Pixels):
         return any(v > 0 for v in self._array.values)
 
     def _map1(self, ibits, fbits, fn) -> Self:
-        ibits = self._ibits
-        fbits = self._fbits
         array = self._array
         return type(self).from_numerators(array.map1(fn), ibits, fbits)
 
     def _map2(self, other, ibits, fbits, fn) -> Self:
-        ibits = self._ibits
-        fbits = self._fbits
         array = self._array
         return type(self).from_numerators(array.map2(fn, other._array), ibits, fbits)
-
-    def _not_(self):
-        return self._map1(1, 0, pixel_not)
 
     def _and_(self, other: SimplePixels) -> Self:
         return self._map2(other, 1, 0, pixel_and)

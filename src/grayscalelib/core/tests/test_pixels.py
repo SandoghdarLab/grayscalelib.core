@@ -133,10 +133,12 @@ def test_permute(pixels_subclass):
         assert isinstance(px, pixels_subclass)
         assert px.permute().shape == shape
         for permutation in chain(*[permutations(range(k)) for k in range(rank)]):
-            flipped = px.permute(*permutation).to_array()
+            flipped1 = px.permute(*permutation).to_array()
+            flipped2 = px.permute(permutation).to_array()
             for index in itertools.product(*[range(s) for s in shape]):
                 other = tuple(index[p] for p in permutation) + index[len(permutation):]
-                assert array[index] == flipped[other]
+                assert array[index] == flipped1[other]
+                assert array[index] == flipped2[other]
 
 
 def test_broadcast_to(pixels_subclass):
@@ -154,4 +156,28 @@ def test_broadcast_to(pixels_subclass):
                 assert array2[index] == array1[index[:rank1]]
 
 
-
+def test_bool(pixels_subclass):
+    for true, false in zip((Pixels(1), Pixels([1, 1])),
+                           (Pixels(0), Pixels([0, 0]))):
+        assert isinstance(true, pixels_subclass)
+        assert isinstance(false, pixels_subclass)
+        # bool
+        assert true
+        # not
+        assert (~ false)
+        assert not (~ true)
+        # and
+        assert (true & true)
+        assert not (true & false)
+        assert not (false & true)
+        assert not (false & false)
+        # or
+        assert (true | true)
+        assert (true | false)
+        assert (false | true)
+        assert not (false | false)
+        # xor
+        assert not (true ^ true)
+        assert (true ^ false)
+        assert (false ^ true)
+        assert not (false ^ false)
