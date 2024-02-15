@@ -288,10 +288,14 @@ class Pixels(Encodable):
 
     # permute
 
-    def permute(self, *permutation: int) -> Pixels:
+    def permute(self, p0: int | tuple = (), /, *more: int) -> Pixels:
         """Reorder all axes according to the supplied integers."""
-        rank = self.rank
+        if isinstance(p0, tuple):
+            permutation = p0 + more
+        else:
+            permutation = (p0,) + more
         nperm = len(permutation)
+        rank = self.rank
         # Ensure that the permutation is well formed.
         if nperm > rank:
             raise ValueError(f"Invalid permutation {permutation} for data of rank {rank}.")
