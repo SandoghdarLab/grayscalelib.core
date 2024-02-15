@@ -84,8 +84,7 @@ def test_getitem(pixels_subclass):
             assert expected == row[j].to_array()[()]
             assert expected == px[i, j].to_array()[()]
     # Now do the full check of up to rank four.
-    sizes = (0, 1, 2, 3)
-    for shape in chain(*[permutations(sizes, k) for k in range(4)]):
+    for shape in chain(*[permutations((0, 1, 2, 3), k) for k in range(4)]):
         rank = len(shape)
         size = math.prod(shape)
         data = list(range(size))
@@ -125,8 +124,7 @@ def test_permute(pixels_subclass):
         assert original[i, j].to_array()[()] == data[i][j]
         assert flipped[i, j].to_array()[()] == data[j][i]
     # Arbitrary rank.
-    sizes = (0, 1, 2, 3)
-    for shape in chain(*[permutations(sizes, k) for k in range(4)]):
+    for shape in chain(*[permutations((0, 1, 2, 3), k) for k in range(4)]):
         rank = len(shape)
         size = math.prod(shape)
         data = list(range(size))
@@ -139,3 +137,21 @@ def test_permute(pixels_subclass):
             for index in itertools.product(*[range(s) for s in shape]):
                 other = tuple(index[p] for p in permutation) + index[len(permutation):]
                 assert array[index] == flipped[other]
+
+
+def test_broadcast_to(pixels_subclass):
+    for shape in chain(*[permutations((0, 5, 7), k) for k in range(3)]):
+        size = math.prod(shape)
+        data = list(range(size))
+        rank1 = len(shape)
+        array1 = SimpleArray(data, shape)
+        px1 = Pixels(array1, limit=max(0, size-1), fbits=0)
+        assert isinstance(px1, pixels_subclass)
+        for suffix in chain(*[permutations((0, 1, 2, 3), k) for k in range(4)]):
+            px2 = px1.broadcast_to(shape + suffix)
+            array2 = px2.to_array()
+            for index in product(*[range(s) for s in px2.shape]):
+                assert array2[index] == array1[index[:rank1]]
+
+
+
