@@ -132,14 +132,15 @@ class SimplePixels(Pixels):
         return self._map2(other, 1, 0, pixel_xor)
 
     def _lshift_(self, amount: int) -> Self:
-        ibits = max(0, self.ibits + amount)
+        ibits = self.ibits + amount
         fbits = max(0, self.fbits - amount)
-        return self._map1(ibits, fbits, lambda x: x << amount)
+        shift = max(0, amount - self.fbits)
+        return self._map1(ibits, fbits, lambda x: x << shift)
 
     def _rshift_(self, amount: int) -> Self:
-        ibits = max(0, self.ibits + amount)
-        fbits = max(0, self.fbits - amount)
-        return self._map1(ibits, fbits, lambda x: x >> amount)
+        ibits = max(0, self.ibits - amount)
+        fbits = self.fbits + amount
+        return self._map1(ibits, fbits, lambda x: x)
 
     def _invert_(self) -> Self:
         d = self.denominator

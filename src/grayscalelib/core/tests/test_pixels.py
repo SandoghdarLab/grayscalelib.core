@@ -192,3 +192,13 @@ def test_bool(pixels_subclass):
     assert Pixels([[[1, 0]]])
     assert Pixels([[[0.5, 0]]], fbits=1)
     assert Pixels([[[0.5, 0]]], fbits=0)
+
+
+def test_shifts(pixels_subclass):
+    px = Pixels(1, fbits=0)
+    assert isinstance(px, pixels_subclass)
+    for shift in range(30):
+        assert (px << shift).numerators[()] == 2**shift
+        assert (px >> shift).numerators[()] == 1
+        assert ((px >> shift) << shift).numerators[()] == 1
+        assert ((px << shift) >> shift).numerators[()] == 2**shift
