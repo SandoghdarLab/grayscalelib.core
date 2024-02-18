@@ -150,29 +150,30 @@ class SimplePixels(Pixels):
         xfbits = self.fbits
         yfbits = other.fbits
         fbits = max(self.fbits, other.fbits)
-        maxval = (1 << fbits) - 1
+        white = (1 << fbits)
         if xfbits == yfbits:
-            fn = lambda x, y: min(x + y, maxval)
+            fn = lambda x, y: min(x + y, white)
         elif xfbits < yfbits:
             shift = yfbits - xfbits
-            fn = lambda x, y: min((x << shift) + y, maxval)
+            fn = lambda x, y: min((x << shift) + y, white)
         else:
             shift = xfbits - yfbits
-            fn = lambda x, y: min(x + (y << shift), maxval)
+            fn = lambda x, y: min(x + (y << shift), white)
         return self._map2(other, 1, fbits, fn)
 
     def _sub_(self, other: Self) -> Self:
         xfbits = self.fbits
         yfbits = other.fbits
         fbits = max(self.fbits, other.fbits)
+        white = (1 << fbits)
         if xfbits == yfbits:
-            fn = lambda x, y: max(0, x - y)
+            fn = lambda x, y: max(0, min(x - y, white))
         elif xfbits < yfbits:
             shift = yfbits - xfbits
-            fn = lambda x, y: max(0, (x << shift) - y)
+            fn = lambda x, y: max(0, min((x << shift) - y, white))
         else:
             shift = xfbits - yfbits
-            fn = lambda x, y: max(0, x - (y << shift))
+            fn = lambda x, y: max(0, min(x - (y << shift), white))
         return self._map2(other, 1, fbits, fn)
 
     def _mul_(self, other: Self) -> Self:
@@ -180,13 +181,12 @@ class SimplePixels(Pixels):
         yfbits = other.fbits
         if xfbits <= yfbits:
             fbits = yfbits
-            shift = xfbits
+            strip = xfbits
         else:
             fbits = xfbits
-            shift = yfbits
-        # Compute z such that the later right shift rounds correctly.
-        z = 0 if shift == 0 else (1 << (shift - 1))
-        return self._map2(other, 1, fbits, lambda x, y: (x * y + z) >> shift)
+            strip = yfbits
+        white = (1 << fbits)
+        return self._map2(other, 1, fbits, lambda x, y: min(strip_bits(x * y, strip), white))
 
     def _pow_(self, power: Self) -> Self:
         raise NotImplementedError()
@@ -228,17 +228,33 @@ class SimplePixels(Pixels):
     def _eq_(self, other: Self) -> Self:
         return self._cmp(other, operator.eq)
 
+    def _ne_(self, other: Self) -> Self:
+        return self._cmp(other, operator.ne)
+
 
 def pixel_not(x) -> Literal[0, 1]:
     return 1 if x == 0 else 0
 
+
 def pixel_and(x, y) -> Literal[0, 1]:
     return 1 if (x > 0 and y > 0) else 0
+
 
 def pixel_or(x, y) -> Literal[0, 1]:
     return 1 if (x > 0 or y > 0) else 0
 
+
 def pixel_xor(x, y) -> Literal[0, 1]:
     return 1 if (x > 0 and y == 0) or (x == 0 and y > 0) else 0
+
+
+def strip_bits(i: int, n: int):
+    if n == 0:
+        return i
+    elif n > 0:
+        return (i + (1 << (n - 1))) >> n
+    else:
+        raise ValueError("Negative number of stripped digits.")
+
 
 set_default_pixels_type(SimplePixels)

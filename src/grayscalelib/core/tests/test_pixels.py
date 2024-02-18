@@ -1,9 +1,58 @@
+from typing import Callable
 import pytest
 import itertools
 import math
+from fractions import Fraction
 from itertools import chain, permutations, product
 from grayscalelib.core.pixels import Pixels, pixels_type
 from grayscalelib.core.simplearray import SimpleArray
+
+
+###############################################################################
+###
+### Fractional Math
+
+
+Frac = int | Fraction
+
+
+def frac(a: int, b: int) -> Frac:
+    if b == 1:
+        return a
+    else:
+        return Fraction(a, b)
+
+
+def fracround(f: Frac, fbits: int) -> Frac:
+    """
+    Approximate f using a rational number with a denominator of 2**fbits.
+    If two rational numbers are equally close, pick the larger one.
+    """
+    denominator = 1 << fbits
+    eps = Fraction(1, denominator << 1)
+    return frac(math.floor((f+eps) * denominator), denominator)
+
+
+def clip(x, lo, hi):
+    return max(lo, min(x, hi))
+
+
+def strip_bits(i: int, n: int):
+    """
+    Divide the integer i by 2**n and round to the nearest integer.  In
+    ambiguous cases, round to the next larger integer.
+    """
+    if n == 0:
+        return i
+    elif n > 0:
+        return (i + (1 << (n - 1))) >> n
+    else:
+        raise ValueError("Negative number of stripped digits.")
+
+
+###############################################################################
+###
+### Tests
 
 
 @pytest.fixture
@@ -202,3 +251,93 @@ def test_shifts(pixels_subclass):
         assert (px >> shift).numerators[()] == 1
         assert ((px >> shift) << shift).numerators[()] == 1
         assert ((px << shift) >> shift).numerators[()] == 2**shift
+
+
+def irange(beg, end, length):
+    step = (end - beg) / length
+    return [round(beg + k*step) for k in range(length)]
+
+
+def generate_pixels(shape) -> list[Pixels]:
+    size = math.prod(shape)
+    # generate a lot of test data.
+    ps: list[Pixels] = []
+    for fbits in (0, 1, 7, 8, 9):
+        white = 2**fbits
+        a1 = SimpleArray(irange(0, white+1, size), shape)
+        a2 = SimpleArray(irange(white, -1, size), shape)
+        a3 = SimpleArray(irange(0, white*3+1, size), shape)
+        for a, limit in [(a1, white), (a2, white), (a3, 3*white)]:
+            p = Pixels(a, white=white, limit=limit, fbits=fbits)
+            ps.append(p)
+            if len(shape) > 0:
+                ps.append(p[::-1])
+            if len(shape) > 1:
+                ps.append(p[::-1, ::-1])
+    return ps
+
+
+two_arg_test = Callable[[Frac, Frac, Frac], bool]
+
+
+def two_arg_map_values(a: Pixels, b: Pixels, r: Pixels, fn: two_arg_test):
+    assert a.shape == b.shape == r.shape
+    na, da = a.numerators, a.denominator
+    nb, db = b.numerators, b.denominator
+    nr, dr = r.numerators, r.denominator
+    for index in product(*[range(s) for s in a.shape]):
+        va = frac(na[*index], da)
+        vb = frac(nb[*index], db)
+        vr = frac(nr[*index], dr)
+        assert fn(va, vb, vr)
+
+
+def test_two_arg_fns(pixels_subclass):
+    for shape in [(), (3,), (2, 3)]:
+        ps = generate_pixels(shape)
+        # __pos__
+        for p in ps:
+            pos = +p
+            assert isinstance(pos, pixels_subclass)
+            assert pos == p
+        # __add__
+        for a, b in product(ps, ps):
+            r = a + b
+            two_arg_map_values(a, b, r, lambda x, y, z: clip(x + y, 0, 1) == z)
+        # __sub__
+        for a, b in product(ps, ps):
+            r = a - b
+            two_arg_map_values(a, b, r, lambda x, y, z: clip(x - y, 0, 1) == z)
+        # __mul__
+        for a, b in product(ps, ps):
+            r = a * b
+            n = max(a.fbits, b.fbits)
+            two_arg_map_values(a, b, r, lambda x, y, z: fracround(clip(x * y, 0, 1), n) == z)
+        # __pow__
+        # __truediv__
+        # __floordiv__
+        # __mod__
+        # __lt__
+        for a, b in product(ps, ps):
+            r = a < b
+            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x < y else 0) == z)
+        # __gt__
+        for a, b in product(ps, ps):
+            r = a > b
+            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x > y else 0) == z)
+        # __le__
+        for a, b in product(ps, ps):
+            r = a <= b
+            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x <= y else 0) == z)
+        # __ge__
+        for a, b in product(ps, ps):
+            r = a >= b
+            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x >= y else 0) == z)
+        # __eq__
+        for a, b in product(ps, ps):
+            r = a == b
+            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x == y else 0) == z)
+        # __ne__
+        for a, b in product(ps, ps):
+            r = a != b
+            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x != y else 0) == z)

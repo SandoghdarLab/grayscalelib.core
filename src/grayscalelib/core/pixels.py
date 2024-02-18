@@ -493,7 +493,7 @@ class Pixels(Encodable):
         assert result.fbits == self.fbits
         return result
 
-    def _invert_(self: Self) -> Self:
+    def _invert_(self) -> Self:
         raise MissingMethod(self, "inverting")
 
     # neg
@@ -719,7 +719,7 @@ class Pixels(Encodable):
         result = a._lt_(b)
         assert result.shape == a.shape
         assert result.ibits == 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.fbits == 0
         return result
 
     def _lt_(self: Self, other: Self) -> Self:
@@ -738,7 +738,7 @@ class Pixels(Encodable):
         result = a._gt_(b)
         assert result.shape == a.shape
         assert result.ibits == 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.fbits == 0
         return result
 
     def _gt_(self: Self, other: Self) -> Self:
@@ -757,7 +757,7 @@ class Pixels(Encodable):
         result = a._le_(b)
         assert result.shape == a.shape
         assert result.ibits == 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.fbits == 0
         return result
 
     def _le_(self: Self, other: Self) -> Self:
@@ -777,7 +777,7 @@ class Pixels(Encodable):
         result = a._ge_(b)
         assert result.shape == a.shape
         assert result.ibits == 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.fbits == 0
         return result
 
     def _ge_(self: Self, other: Self) -> Self:
@@ -795,12 +795,31 @@ class Pixels(Encodable):
         result = a._eq_(b)
         assert result.shape == a.shape
         assert result.ibits == 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.fbits == 0
         return result
 
     def _eq_(self: Self, other: Self) -> Self:
         _ = other
         raise MissingMethod(self, "determining the equality of")
+
+    # ne
+
+    def __ne__(self, other) -> Pixels: # type: ignore
+        """
+        One wherever the left value is different than the right, zero otherwise.
+
+        The resulting container has one integer bit, and zero fractional bits.
+        """
+        a, b = broadcast(self, other)
+        result = a._ne_(b)
+        assert result.shape == a.shape
+        assert result.ibits == 1
+        assert result.fbits == 0
+        return result
+
+    def _ne_(self: Self, other: Self) -> Self:
+        _ = other
+        return (self._eq_(other))._invert_()
 
     # TODO new methods: average, rolling_average, difference
 
@@ -876,19 +895,6 @@ def coerce_to_nested_sequence(
     else:
         raise TypeError(f"Cannot coerce {data} to a nested sequence.")
 
-
-def divide_accurately(a, b):
-    if hasattr(a, 'as_integer_ratio') and hasattr(b, 'as_integer_ratio'):
-        na, da = a.as_integer_ratio()
-        nb, db = b.as_integer_ratio()
-        frac = Fraction(na, da) / Fraction(nb, db)
-        if frac.denominator == 1:
-            return frac.numerator
-        else:
-            return frac
-    else:
-        # Use __truediv__ as a fallback solution.
-        return a / b
 
 def canonicalize_index(index, shape: tuple) -> tuple[int | slice, ...]:
     # Step 1 - Convert the index into a tuple.
