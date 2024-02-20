@@ -98,6 +98,13 @@ class SimpleArray(ArrayLike, Generic[T]):
         else:
             return SimpleArray(new_values, new_shape)
 
+    def item(self, index: int | tuple[int, ...]) -> T:
+        if isinstance(index, int):
+            return self.values[index]
+        else:
+            assert len(index) == len(self.shape)
+            return self[index] # type: ignore
+
     def permute(self, axes: tuple[int, ...]):
         old_shape = self.shape
         old_strides = self.strides

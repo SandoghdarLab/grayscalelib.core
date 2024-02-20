@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Callable, Literal, Self
 
-import itertools
+from itertools import product
 
-import math
+from math import prod, floor
 
 import operator
 
@@ -41,10 +41,10 @@ class SimplePixels(Pixels):
         n, d = delta.as_integer_ratio()
         mul = (2 << fbits) * d
         div = 1 if n == 0 else 2 * n
-        nulim = math.floor(((limit - black) * mul + delta) / div)
-        for index in itertools.product(*tuple(range(n) for n in shape)):
+        nulim = floor(((limit - black) * mul + delta) / div)
+        for index in product(*tuple(range(n) for n in shape)):
             clipped = max(0, min(array[index] - black, limit - black))
-            value = int(math.floor((clipped * mul + delta) / div))
+            value = int(floor((clipped * mul + delta) / div))
             assert 0 <= value <= nulim
             values.append(value)
         self._shape = shape
@@ -113,7 +113,7 @@ class SimplePixels(Pixels):
         array = self._array
         old_shape = self._shape
         new_shape = shape
-        growth = math.prod(new_shape[len(old_shape):])
+        growth = prod(new_shape[len(old_shape):])
         new_values: list[int] = []
         for value in array.values:
             new_values.extend([value] * growth)
@@ -247,7 +247,32 @@ class SimplePixels(Pixels):
         return self._cmp(other, operator.ne)
 
     def _rolling_sum_(self, window_sizes):
-        raise NotImplementedError()
+        shape = self.shape
+        array = self._array
+        for axis, window_size in enumerate(window_sizes):
+            oldsize = shape[axis]
+            newsize = oldsize - window_size + 1
+            values: list[int] = []
+            for prefix in product(*[range(s) for s in shape[:axis]]):
+                rest = shape[axis+1:]
+                suffixes = list(product(*[range(s) for s in rest])) or (())
+                sums = [0] * prod(rest)
+                # Compute the sums of the first window_size elements.
+                for index in range(window_size):
+                    for pos, suffix in enumerate(suffixes):
+                        sums[pos] += array.item((*prefix, index, *suffix))
+                # Initialize the first entry of the result.
+                values.extend(sums)
+                # Compute the remaining entries of the result by sliding the
+                # window one element at a time.
+                for index in range(1, newsize):
+                    for pos, suffix in enumerate(suffixes):
+                        sums[pos] -= array.item((*prefix, index-1, *suffix))
+                        sums[pos] += array.item((*prefix, index+window_size-1, *suffix))
+                    values.extend(sums)
+            array = SimpleArray(values, shape[:axis] + (newsize,) + shape[axis+1:])
+        nulim = prod(window_sizes) * self.nulim
+        return self.from_numerators(array, nulim, self.fbits)
 
 
 def pixel_not(x) -> Literal[0, 1]:

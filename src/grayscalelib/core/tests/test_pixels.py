@@ -341,3 +341,19 @@ def test_two_arg_fns(pixels_subclass):
         for a, b in product(ps, ps):
             r = a != b
             two_arg_map_values(a, b, r, lambda x, y, z: (1 if x != y else 0) == z)
+
+
+def test_rolling_sum(pixels_subclass):
+    px = Pixels([0.00, 0.25, 0.50, 0.75, 1.00], fbits=2)
+    rs1 = px.rolling_sum(1)
+    rs2 = px.rolling_sum(2)
+    rs3 = px.rolling_sum(3)
+    rs4 = px.rolling_sum(4)
+    rs5 = px.rolling_sum(5)
+    for rs in [rs1, rs2, rs3, rs4, rs5]:
+        assert isinstance(rs, pixels_subclass)
+    assert rs1 == px
+    assert rs2 == Pixels([0.25, 0.75, 1.25, 1.75], limit=1.75, fbits=2)
+    assert rs3 == Pixels([0.75, 1.50, 2.25], limit=2.25, fbits=2)
+    assert rs4 == Pixels([1.50, 2.50], limit=2.5, fbits=2)
+    assert rs5 == Pixels([2.5], limit=2.5, fbits=2)
