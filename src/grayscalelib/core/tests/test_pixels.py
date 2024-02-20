@@ -64,7 +64,7 @@ def pixels_subclass(request):
 
 def test_init(pixels_subclass):
     # Check some trivial cases.
-    assert Pixels(0, fbits=0, ibits=0).to_array()[()] == 0
+    assert Pixels(0, white=0, fbits=0).to_array()[()] == 0
     assert Pixels(1, fbits=0).to_array()[()] == 1
     assert Pixels(0.5, fbits=0).to_array()[()] == 1
     # Ensure that shapes are computed correctly.

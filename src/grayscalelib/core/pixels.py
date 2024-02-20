@@ -4,9 +4,7 @@ from abc import abstractmethod
 
 from contextlib import contextmanager
 
-from fractions import Fraction
-
-from math import floor
+from math import floor, prod
 
 from types import EllipsisType
 
@@ -113,7 +111,6 @@ class Pixels(Encodable):
             black: RealLike = 0,
             white: RealLike = 1,
             limit: RealLike | None = None,
-            ibits: int | None = None,
             fbits: int | None = None):
         """
         Initialize a Pixels container, based on the supplied arguments.
@@ -137,8 +134,6 @@ class Pixels(Encodable):
         limit: real
             The number at which input data saturates.  Defaults to white, but can
             be set to a higher value to allow for pixel values larger than one.
-        ibits: int, optional
-            The number of bits of integer precision of the resulting pixels.
         fbits: int, optional
             The number of bits of fractional precision of the resulting pixels.
             Defaults to the maximum fractional precision of any item in the data
@@ -152,28 +147,19 @@ class Pixels(Encodable):
             raise ValueError("Black must be less than or equal to limit.")
         if (black == white) and (white != limit):
             raise ValueError("Cannot set explicit limit when black equals white.")
-        if ibits is None:
-            delta = white - black
-            bound = 0 if delta == 0 else floor(((limit - black) * 2 + delta) / (2 * delta))
-            ibits = bound.bit_length()
-        if ibits < 0:
-            raise ValueError("The number of integer bits must be non-negative.")
         if fbits is None:
             fbits = _default_fbits
         if fbits < 0:
             raise ValueError("The number of fractional bits must be non-negative.")
         array = coerce_to_array(data)
-        self._init_(array, black, white, limit, ibits, fbits)
+        self._init_(array, black, white, limit, fbits)
         # Ensure the container was initialized correctly.
-        assert self.ibits == ibits
-        assert self.fbits == fbits
         assert self.shape == array.shape
+        assert self.fbits == fbits
 
     @classmethod
-    def from_numerators(cls, array: ArrayLike, ibits: int, fbits: int):
-        white = (1 << fbits)
-        limit = (white << ibits) - 1
-        return cls(array, white=white, limit=limit, ibits=ibits, fbits=fbits)
+    def from_numerators(cls, array: ArrayLike, limit: int, fbits: int):
+        return cls(array, white=(1 << fbits), limit=limit, fbits=fbits)
 
     @abstractmethod
     def _init_(
@@ -182,27 +168,11 @@ class Pixels(Encodable):
             black: RealLike,
             white: RealLike,
             limit: RealLike,
-            ibits: int,
             fbits: int):
         """
-        Initialize the supplied pixels based on the supplied parameters.
-
-        Parameters
-        ----------
-
-        data: ArrayLike
-            An array-like object of real numbers.  Each element of the array
-            provides the data for one pixel.  The conversion of numbers to
-            pixels is governed by the remaining arguments.
-        ibits: int
-            The number of bits of integer precision of the resulting pixels.
-        fbits: int
-            The number of bits of fractional precision of the resulting pixels.
-        scale, offset, maxval: RealLike
-            These numbers govern the mapping from data elements to integers that
-            are the numerators of a fractional encoding with denominator 2**fbits.
-            The formula for converting the number X to the corresponding numerator
-            is max(0, min(round(scale * number[I] + offset), maxval)).
+        Initialize the supplied pixels based on the supplied parameters.  This
+        method is called by __init__ after ensuring that all supplied arguments
+        are well formed.
         """
         raise MissingMethod(self, "creating")
 
@@ -215,13 +185,12 @@ class Pixels(Encodable):
         ...
 
     @property
-    @abstractmethod
     def ibits(self) -> int:
         """
         The number of bits of precision of the integer part of each pixel
         value.
         """
-        ...
+        return max(0, self.nulim.bit_length() - self.fbits)
 
     @property
     @abstractmethod
@@ -238,7 +207,7 @@ class Pixels(Encodable):
         The denominator of the internal fractional encoding of each pixel
         value.
         """
-        return 2 ** self.fbits
+        return (1 << self.fbits)
 
     @property
     @abstractmethod
@@ -248,6 +217,14 @@ class Pixels(Encodable):
         values are the numerators of each pixel value.
         """
         pass
+
+    @property
+    @abstractmethod
+    def nulim(self) -> int:
+        """
+        The largest numerator that may appear in any pixel.
+        """
+        ...
 
     @property
     def rank(self) -> int:
@@ -270,7 +247,10 @@ class Pixels(Encodable):
         """
         name = type(self).__name__
         data = coerce_to_nested_sequence(self.numerators)
-        return f"{name}({data}, white={self.denominator}, ibits={self.ibits}, fbits={self.fbits})"
+        if self.nulim == self.denominator:
+            return f"{name}({data}, shape={self.shape}, fbits={self.fbits})"
+        else:
+            return f"{name}({data}, shape={self.shape}, fbits={self.fbits}, nulim={self.nulim})"
 
     @abstractmethod
     def to_array(self) -> ArrayLike:
@@ -289,7 +269,9 @@ class Pixels(Encodable):
     # permute
 
     def permute(self, p0: int | tuple = (), /, *more: int) -> Pixels:
-        """Reorder all axes according to the supplied integers."""
+        """
+        Reorder all axes according to the supplied integers.
+        """
         if isinstance(p0, tuple):
             permutation = p0 + more
         else:
@@ -322,6 +304,23 @@ class Pixels(Encodable):
     def _permute_(self, permutation: tuple[int, ...]) -> Pixels:
         _ = permutation
         raise MissingMethod(self, "permuting")
+
+    # reshape
+
+    def reshape(self, shape: tuple[int, ...]) -> Pixels:
+        """
+        Returns pixels with the original data and the supplied shape.
+        """
+        if prod(shape) != prod(self.shape):
+            raise ValueError(f"Cannot reshape from shape {self.shape} to shape {shape}.")
+        cls = encoding(type(self))
+        result = encode_as(self, cls)._reshape_(shape)
+        assert result.shape == shape
+        return result
+
+    def _reshape_(self, shape: tuple[int, ...]) -> Self:
+        _ = shape
+        raise MissingMethod(self, "reshaping")
 
     # broadcast_to
 
@@ -426,8 +425,6 @@ class Pixels(Encodable):
             return pix
         result = pix._lshift_(amount)
         assert result.shape == self.shape
-        assert max(0, self.ibits + amount) == result.ibits
-        assert max(0, self.fbits - amount) == result.fbits
         return result
 
     def _lshift_(self: Self, amount: int) -> Self:
@@ -440,8 +437,8 @@ class Pixels(Encodable):
         """
         Divide each value by two to the power of the supplied amount.
 
-        While shifting, move the specified amount of bits from the integer
-        part of the encoding to the fractional part of the encoding.
+        While shifting, add the specified amount of bits to the fractional part
+        of the encoding.
         """
         # Ensure the amount is non-negative.
         if amount < 0:
@@ -452,8 +449,6 @@ class Pixels(Encodable):
             return pix
         result = pix._rshift_(amount)
         assert result.shape == self.shape
-        assert max(0, self.ibits - amount) == result.ibits
-        assert max(0, self.fbits + amount) == result.fbits
         return result
 
     def _rshift_(self: Self, amount: int) -> Self:
@@ -531,14 +526,14 @@ class Pixels(Encodable):
         """
         Add the values of the two containers and clip the result to [0, 1].
 
-        The result of this operation has exactly one integer bit, and a number
+        The result of this operation has at most one integer bit, and a number
         of fractional bits that is the maximum of the numbers of fractional
         bits of the two arguments.
         """
         a, b = broadcast(self, other)
         result = a._add_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
+        assert result.ibits <= 1
         assert result.fbits == max(a.fbits, b.fbits)
         return result
 
@@ -555,14 +550,14 @@ class Pixels(Encodable):
         Subtract the values of the two containers and clip the result to the
         interval [0, 1].
 
-        The result of this operation has exactly one integer bit, and a number
+        The result of this operation has at most one integer bit, and a number
         of fractional bits that is the maximum of the numbers of fractional
         bits of the two arguments.
         """
         a, b = broadcast(self, other)
         result = a._sub_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
+        assert result.ibits <= 1
         assert result.fbits == max(a.fbits, b.fbits)
         return result
 
@@ -570,7 +565,7 @@ class Pixels(Encodable):
         b, a = broadcast(self, other)
         result = a._sub_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
+        assert result.ibits <= 1
         assert result.fbits == max(a.fbits, b.fbits)
         return result
 
@@ -584,20 +579,22 @@ class Pixels(Encodable):
         """
         Add the values of the two containers and clip the result to [0, 1].
 
-        The result of this operation has exactly one integer bit, and a number
+        The result of this operation has at most one integer bit, and a number
         of fractional bits that is the maximum of the numbers of fractional
         bits of the two arguments.
         """
         a, b = broadcast(self, other)
         result = a._mul_(b)
         assert result.shape == a.shape
+        assert result.ibits <= 1
+        assert result.fbits == max(a.fbits, b.fbits)
         return result
 
     __rmul__ = __mul__ # mul is symmetric
 
     def _mul_(self: Self, other: Self) -> Self:
         _ = other
-        raise MissingMethod(self, 'muling')
+        raise MissingMethod(self, "multiplying")
 
     # pow
 
@@ -605,14 +602,14 @@ class Pixels(Encodable):
         """
         Raise each value to the specified power, and clip the result to [0, 1].
 
-        The result of this operation has one integer bit, and a number of
+        The result of this operation has at most integer bit, and a number of
         fractional bits that is the maximum of the numbers of fractional bits
         of the two arguments.
         """
         a, b = broadcast(self, power)
         result = a._pow_(b)
         assert result.shape == self.shape
-        assert result.ibits == 1
+        assert result.ibits <= 1
         assert result.fbits == max(a.fbits, b.fbits)
         return result
 
@@ -641,7 +638,6 @@ class Pixels(Encodable):
         b, a = broadcast(self, other)
         result = a._truediv_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == max(a.fbits, b.fbits)
         return result
 
@@ -662,7 +658,6 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._floordiv_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == max(a.fbits, b.fbits)
         return result
 
@@ -670,7 +665,6 @@ class Pixels(Encodable):
         b, a = broadcast(self, other)
         result = a._floordiv_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == max(a.fbits, b.fbits)
         return result
 
@@ -691,7 +685,6 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._mod_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == max(a.fbits, b.fbits)
         return result
 
@@ -699,7 +692,6 @@ class Pixels(Encodable):
         b, a = broadcast(self, other)
         result = a._mod_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == max(a.fbits, b.fbits)
         return result
 
@@ -718,7 +710,6 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._lt_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == 0
         return result
 
@@ -737,7 +728,6 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._gt_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == 0
         return result
 
@@ -756,7 +746,6 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._le_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == 0
         return result
 
@@ -776,7 +765,6 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._ge_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == 0
         return result
 
@@ -794,7 +782,6 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._eq_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == 0
         return result
 
@@ -813,7 +800,6 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._ne_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
         assert result.fbits == 0
         return result
 
@@ -821,9 +807,92 @@ class Pixels(Encodable):
         _ = other
         return (self._eq_(other))._invert_()
 
-    # TODO new methods: average, rolling_average, difference
+    # sum
 
-    # TODO new methods: mean, median, variance, convolve, fft
+    def sum(self, axis: int | tuple[int, ...]=0, keepdims: bool=False) -> Pixels:
+        """
+        The sum of all values along the specified axis or axes.
+        """
+        rank = self.rank
+        axes = canonicalize_axes(axis, rank)
+        window_sizes = tuple((size if axis in axes else 1) for axis, size in enumerate(self.shape))
+        result = self.rolling_sum(window_sizes)
+        if keepdims:
+            return result
+        else:
+            shape = tuple(size for axis, size in enumerate(self.shape) if axis not in axes)
+            return result.reshape(shape)
+
+    def rolling_sum(self, window_size: int | tuple[int, ...]) -> Pixels:
+        """
+        The rolling sum for a given window size.
+        """
+        window_sizes = canonicalize_window_sizes(window_size, self.shape)
+        cls = encoding(type(self))
+        result = encode_as(self, cls)._rolling_sum_(window_sizes)
+        assert result.shape == tuple((s - w + 1) for s, w in zip(self.shape, window_sizes))
+        assert result.nulim == prod(window_sizes) * self.nulim
+        assert result.fbits == self.fbits
+        return result
+
+    def _rolling_sum_(self, window_sizes: tuple[int, ...]) -> Self:
+        _ = window_sizes
+        raise MissingMethod(self, "computing the sum of")
+
+    # average
+
+    def average(self, axis: int | tuple[int, ...]=0, keepdims: bool=False) -> Pixels:
+        """
+        The average of all values along the specified axis or axes.
+        """
+        rank = self.rank
+        axes = canonicalize_axes(axis, rank)
+        window_sizes = tuple((size if axis in axes else 1) for axis, size in enumerate(self.shape))
+        result = self.rolling_average(window_sizes)
+        if keepdims:
+            return result
+        else:
+            shape = tuple(size for axis, size in enumerate(self.shape) if axis not in axes)
+            return result.reshape(shape)
+
+    def rolling_average(self, window_size: int | tuple[int, ...]) -> Pixels:
+        """
+        The rolling average for a given window size.
+        """
+        window_sizes = canonicalize_window_sizes(window_size, self.shape)
+        amount = prod(window_sizes)
+        return self.rolling_sum(window_sizes) / amount
+
+    # median
+
+    def median(self, axis: int | tuple[int, ...]=0, keepdims: bool=False) -> Pixels:
+        """
+        The median of all values along the specified axis or axes.
+        """
+        rank = self.rank
+        axes = canonicalize_axes(axis, rank)
+        window_sizes = tuple((size if axis in axes else 1) for axis, size in enumerate(self.shape))
+        result = self.rolling_median(window_sizes)
+        if keepdims:
+            return result
+        else:
+            shape = tuple(size for axis, size in enumerate(self.shape) if axis not in axes)
+            return result.reshape(shape)
+
+    def rolling_median(self, window_size: int | tuple[int, ...]) -> Pixels:
+        window_sizes = canonicalize_window_sizes(window_size, self.shape)
+        cls = encoding(type(self))
+        result = encode_as(self, cls)._rolling_median_(window_sizes)
+        assert result.shape == tuple((s - w + 1) for s, w in zip(self.shape, window_sizes))
+        assert result.nulim == self.nulim
+        assert result.fbits == self.fbits
+        return result
+
+    def _rolling_median_(self, window_sizes: tuple[int, ...]) -> Self:
+        _ = window_sizes
+        raise MissingMethod(self, "computing the median of")
+
+    # TODO new methods: variance, convolve, fft
 
 
 def MissingMethod(self, action) -> TypeError:
@@ -926,6 +995,45 @@ def canonicalize_index(index, shape: tuple) -> tuple[int | slice, ...]:
         else:
             raise TypeError(f"Invalid index component {entry}.")
     return ituple
+
+
+def canonicalize_axes(
+        axis: int | tuple[int, ...],
+        rank: int) -> tuple[int, ...]:
+    assert 0 <= rank
+    if isinstance(axis, int):
+        axes = (axis,)
+    elif isinstance(axis, tuple):
+        axes = axis
+    else:
+        raise TypeError(f"Invalid axis specifier {axis}.")
+    for index, axis in enumerate(axes):
+        if not (0 <= axis < rank):
+            raise ValueError(f"Invalid axis {axis} for data of rank {rank}.")
+        if axis in axes[:index]:
+            raise ValueError(f"Duplicate axis {axis} in {axes}.")
+    return axes
+
+
+def canonicalize_window_sizes(
+        window_size: int | tuple[int, ...],
+        shape: tuple[int, ...]) -> tuple[int, ...]:
+    rank = len(shape)
+    if isinstance(window_size, int):
+        window_sizes = (window_size,) + (1,) * max(0, rank-1)
+    elif isinstance(window_size, tuple):
+        n = len(window_size)
+        window_sizes = window_size + (1,) * max(0, rank-n)
+    else:
+        raise TypeError(f"Invalid window size specifier {window_size}.")
+    if len(window_sizes) > rank:
+        raise ValueError(f"Too many window sizes for data of rank {rank}.")
+    for ws, size in zip(window_sizes, shape):
+        if (not isinstance(ws, int)) or ws < 1:
+            raise ValueError(f"Invalid window size {ws}.")
+        if ws > size:
+            raise ValueError(f"Too large window size {ws} for axis of size {size}.")
+    return window_sizes
 
 
 def broadcast_shapes(shape1: tuple, shape2: tuple) -> tuple:
