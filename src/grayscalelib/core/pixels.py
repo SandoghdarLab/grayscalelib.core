@@ -338,17 +338,31 @@ class Pixels(Encodable):
         _ = shape
         raise MissingMethod(self, "broadcasting")
 
-    # bool
+    # predicates
 
     def __bool__(self) -> bool:
-        """Whether at least one pixel in the container is not zero."""
+        raise RuntimeError("Never boolify Pixels, use .any() or .all() instead.")
+
+    def any(self) -> bool:
+        """Whether at least one pixel in the container has a non-zero value."""
         cls = encoding(type(self))
-        result = encode_as(self, cls)._bool_()
+        result = encode_as(self, cls)._any_()
         assert result is True or result is False
         return result
 
-    def _bool_(self) -> bool:
-        raise MissingMethod(self, "determining the truth of")
+    def _any_(self) -> bool:
+        raise MissingMethod(self, "testing for any-non-zero")
+
+    def all(self) -> bool:
+        """Whether all pixels in the container have a non-zero value."""
+        cls = encoding(type(self))
+        result = encode_as(self, cls)._all_()
+        assert result is True or result is False
+        return result
+
+    def _all_(self) -> bool:
+        raise MissingMethod(self, "testing for all-non-zero")
+
 
     # and
 

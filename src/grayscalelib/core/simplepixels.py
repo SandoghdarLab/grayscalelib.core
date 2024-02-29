@@ -120,8 +120,11 @@ class SimplePixels(Pixels):
         new_array = SimpleArray(new_values, new_shape)
         return type(self).from_numerators(new_array, nulim, fbits)
 
-    def _bool_(self) -> bool:
+    def _any_(self) -> bool:
         return any(v > 0 for v in self._array.values)
+
+    def _all_(self) -> bool:
+        return all(v > 0 for v in self._array.values)
 
     def _map1(self, nulim, fbits, fn) -> Self:
         array = self._array
@@ -247,9 +250,9 @@ class SimplePixels(Pixels):
         return self._cmp(other, operator.ne)
 
     def _rolling_sum_(self, window_sizes):
-        shape = self.shape
         array = self._array
         for axis, window_size in enumerate(window_sizes):
+            shape = array.shape
             oldsize = shape[axis]
             newsize = oldsize - window_size + 1
             values: list[int] = []

@@ -213,34 +213,47 @@ def test_nroadcast_to(pixels_subclass):
 
 
 def test_bool(pixels_subclass):
-    for true, false in zip((Pixels(1), Pixels([1, 1]), Pixels([[1, 1], [1, 1]])),
-                           (Pixels(0), Pixels([0, 0]), Pixels([[0, 0], [0, 0]]))):
-        assert isinstance(true, pixels_subclass)
-        assert isinstance(false, pixels_subclass)
+    for alltrue, anytrue, allfalse in zip((Pixels(1), Pixels([1, 1]), Pixels([[1, 1], [1, 1]])),
+                                          (Pixels(1), Pixels([0, 1]), Pixels([[0, 0], [1, 0]])),
+                                          (Pixels(0), Pixels([0, 0]), Pixels([[0, 0], [0, 0]]))):
+        assert isinstance(alltrue, pixels_subclass)
+        assert isinstance(anytrue, pixels_subclass)
+        assert isinstance(allfalse, pixels_subclass)
         # bool
-        assert true
+        assert alltrue.all()
+        assert alltrue.any()
+        assert anytrue.any()
         # not
-        assert (~ false)
-        assert not (~ true)
+        assert (~ allfalse).all()
+        assert not (~ alltrue).all()
+        assert not (~ alltrue).any()
+        assert not (~ anytrue).all()
         # and
-        assert (true & true)
-        assert not (true & false)
-        assert not (false & true)
-        assert not (false & false)
+        assert (alltrue & alltrue).all()
+        assert (alltrue & alltrue).any()
+        assert (alltrue & anytrue).any()
+        assert not (alltrue & allfalse).any()
+        assert not (allfalse & alltrue).any()
+        assert not (allfalse & allfalse).any()
         # or
-        assert (true | true)
-        assert (true | false)
-        assert (false | true)
-        assert not (false | false)
+        assert (alltrue | alltrue).all()
+        assert (alltrue | alltrue).any()
+        assert (alltrue | allfalse).all()
+        assert (alltrue | allfalse).any()
+        assert (allfalse | alltrue).all()
+        assert (allfalse | alltrue).any()
+        assert not (allfalse | allfalse).all()
+        assert not (allfalse | allfalse).any()
         # xor
-        assert not (true ^ true)
-        assert (true ^ false)
-        assert (false ^ true)
-        assert not (false ^ false)
-    # Ensure that Pixels are true if any element is non-zero.
-    assert Pixels([[[1, 0]]])
-    assert Pixels([[[0.5, 0]]], fbits=1)
-    assert Pixels([[[0.5, 0]]], fbits=0)
+        assert not (alltrue ^ alltrue).any()
+        assert (alltrue ^ allfalse).all()
+        assert (allfalse ^ alltrue).all()
+        assert not (allfalse ^ allfalse).any()
+    assert Pixels([[[1, 1]]]).all()
+    assert Pixels([[[0.5, 1.0]]], fbits=1).all()
+    assert not Pixels([[[0.5, 0]]], fbits=0).all()
+    assert not Pixels([[[0.5, 0]]], fbits=0).all()
+    assert Pixels([[[0.5, 0]]], fbits=0).any()
 
 
 def test_shifts(pixels_subclass):
@@ -299,7 +312,7 @@ def test_two_arg_fns(pixels_subclass):
         for p in ps:
             pos = +p
             assert isinstance(pos, pixels_subclass)
-            assert pos == p
+            assert (pos == p).all()
         # __add__
         for a, b in product(ps, ps):
             r = a + b
@@ -344,6 +357,10 @@ def test_two_arg_fns(pixels_subclass):
 
 
 def test_rolling_sum(pixels_subclass):
+    # 0D tests
+    assert (Pixels(0).rolling_sum(()) == Pixels(0)).all()
+    assert (Pixels(1).rolling_sum(()) == Pixels(1)).all()
+    # 1D tests
     px = Pixels([0.00, 0.25, 0.50, 0.75, 1.00], fbits=2)
     rs1 = px.rolling_sum(1)
     rs2 = px.rolling_sum(2)
@@ -352,8 +369,25 @@ def test_rolling_sum(pixels_subclass):
     rs5 = px.rolling_sum(5)
     for rs in [rs1, rs2, rs3, rs4, rs5]:
         assert isinstance(rs, pixels_subclass)
-    assert rs1 == px
-    assert rs2 == Pixels([0.25, 0.75, 1.25, 1.75], limit=1.75, fbits=2)
-    assert rs3 == Pixels([0.75, 1.50, 2.25], limit=2.25, fbits=2)
-    assert rs4 == Pixels([1.50, 2.50], limit=2.5, fbits=2)
-    assert rs5 == Pixels([2.5], limit=2.5, fbits=2)
+    assert (rs1 == px).all()
+    assert (rs2 == Pixels([0.25, 0.75, 1.25, 1.75], limit=1.75, fbits=2)).all()
+    assert (rs3 == Pixels([0.75, 1.50, 2.25], limit=2.25, fbits=2)).all()
+    assert (rs4 == Pixels([1.50, 2.50], limit=2.5, fbits=2)).all()
+    assert (rs5 == Pixels([2.5], limit=2.5, fbits=2)).all()
+    # 2D tests
+    px = Pixels([[0, 1, 2], [3, 4, 5], [6, 7, 8]], limit=8, fbits=0)
+    assert (px.rolling_sum((1, 1)) == Pixels([[0, 1, 2], [3, 4, 5], [6, 7, 8]], limit=8, fbits=0)).all()
+    assert (px.rolling_sum((2, 1)) == Pixels([[3, 5, 7], [9, 11, 13]], limit=13, fbits=0)).all()
+    assert (px.rolling_sum((3, 1)) == Pixels([[9, 12, 15]], limit=15, fbits=0)).all()
+    assert (px.rolling_sum((1, 2)) == Pixels([[1, 3], [7, 9], [13, 15]], limit=15, fbits=0)).all()
+    assert (px.rolling_sum((2, 2)) == Pixels([[8, 12], [20, 24]], limit=24, fbits=0)).all()
+    assert (px.rolling_sum((3, 2)) == Pixels([[21, 27]], limit=27, fbits=0)).all()
+    assert (px.rolling_sum((1, 3)) == Pixels([[3], [12], [21]], limit=21, fbits=0)).all()
+    assert (px.rolling_sum((2, 3)) == Pixels([[15], [33]], limit=33, fbits=0)).all()
+    assert (px.rolling_sum((3, 3)) == Pixels([[36]], limit=36, fbits=0)).all()
+    assert (px.rolling_sum(1) == px.rolling_sum((1,))).all()
+    assert (px.rolling_sum(1) == px.rolling_sum((1, 1))).all()
+    assert (px.rolling_sum(2) == px.rolling_sum((2,))).all()
+    assert (px.rolling_sum(2) == px.rolling_sum((2, 1))).all()
+    assert (px.rolling_sum(3) == px.rolling_sum((3,))).all()
+    assert (px.rolling_sum(3) == px.rolling_sum((3, 1))).all()
