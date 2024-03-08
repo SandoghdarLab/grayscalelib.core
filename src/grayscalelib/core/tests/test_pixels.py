@@ -2,57 +2,13 @@ from typing import Callable
 import pytest
 import itertools
 import math
-from fractions import Fraction
 from itertools import chain, permutations, product
 from grayscalelib.core.pixels import Pixels, pixels_type
 from grayscalelib.core.simplearray import SimpleArray
 
 
-###############################################################################
-###
-### Fractional Math
-
-
-Frac = int | Fraction
-
-
-def frac(a: int, b: int) -> Frac:
-    if b == 1:
-        return a
-    else:
-        return Fraction(a, b)
-
-
-def fracround(f: Frac, fbits: int) -> Frac:
-    """
-    Approximate f using a rational number with a denominator of 2**fbits.
-    If two rational numbers are equally close, pick the larger one.
-    """
-    denominator = 1 << fbits
-    eps = Fraction(1, denominator << 1)
-    return frac(math.floor((f+eps) * denominator), denominator)
-
-
 def clip(x, lo, hi):
     return max(lo, min(x, hi))
-
-
-def strip_bits(i: int, n: int):
-    """
-    Divide the integer i by 2**n and round to the nearest integer.  In
-    ambiguous cases, round to the next larger integer.
-    """
-    if n == 0:
-        return i
-    elif n > 0:
-        return (i + (1 << (n - 1))) >> n
-    else:
-        raise ValueError("Negative number of stripped digits.")
-
-
-###############################################################################
-###
-### Tests
 
 
 @pytest.fixture
@@ -64,9 +20,11 @@ def pixels_subclass(request):
 
 def test_init(pixels_subclass):
     # Check some trivial cases.
-    assert Pixels(0, white=0, fbits=0).to_array()[()] == 0
-    assert Pixels(1, fbits=0).to_array()[()] == 1
-    assert Pixels(0.5, fbits=0).to_array()[()] == 1
+    assert Pixels(0, power=0).to_array()[()] == 0
+    assert Pixels(1, power=0).to_array()[()] == 1
+    # round to nearest even
+    assert Pixels(0.5, power=0).to_array()[()] == 0
+    assert Pixels(1.5, limit=2, power=0).to_array()[()] == 2
     # Ensure that shapes are computed correctly.
     assert Pixels(0).shape == ()
     assert Pixels([]).shape == (0,)
@@ -74,63 +32,54 @@ def test_init(pixels_subclass):
     assert Pixels([[[]]]).shape == (1, 1, 0)
     assert Pixels([[0], [1]]).shape == (2, 1)
     # When converting real numbers in the [0, 1] range to pixels, the resulting
-    # round-off error should be at most 2**(-fbits-1).
-    for fbits in range(14):
-        maxerr = 2**(-fbits-1)
-        denominator = 2**fbits
+    # round-off error should be at most 2**(-power-1).
+    for power in range(0, -14, -1):
+        maxerr = 2**(-power-1)
+        denominator = 2**(-power)
         size = denominator+1
         data = [n / denominator for n in range(size)]
-        px = Pixels(data, fbits=fbits)
+        px = Pixels(data, power=power)
         assert isinstance(px, pixels_subclass)
         array = px.to_array()
         for index in range(size):
             assert abs(array[index] - data[index]) < maxerr
     # Check that black, white, and limit are correctly accounted for.
-    for fbits, black in product([0, 1, 2], range(-3, 3)):
-        for white, limit in product(range(black, black+3), range(black, black+9)):
-            if black == white and white != limit:
-                continue
+    for power, black in product([0, -1, -2], range(-3, 3)):
+        for white, limit in product(range(black+1, black+3), range(black+1, black+9)):
             delta = (white - black)
             data = [[black-1, black, black+1],
                     [white-1, white, white+1],
                     [limit-1, limit, limit+1]]
-            px = Pixels(data, fbits=fbits, black=black, white=white, limit=limit)
-            numerators = px.numerators
+            px = Pixels(data, power=power, black=black, white=white, limit=limit)
+            pxdata = px.data
             for i, j in product(*tuple(range(s) for s in px.shape)):
-                expected = black if delta == 0 else max(black, min(data[i][j], limit))
-                restored = ((numerators[i, j] * delta) >> fbits) + black
+                expected = max(black, min(data[i][j], limit))
+                restored = ((pxdata[i, j] * delta) * 2**power) + black
                 assert black <= restored <= limit + delta / 2
                 assert abs(restored - expected) <= delta
-    # Ensure that the ibits are computed correctly.
-    for white in range(1, 5):
-        for limit in range(white, 17):
-            data = list(range(-1, limit+1))
-            px = Pixels(data, fbits=0, white=white, limit=limit)
-            bound = math.floor((limit * 2 + white) / (2 * white))
-            assert px.ibits == bound.bit_length()
 
 
 def test_getitem(pixels_subclass):
     # Check indexing into an array of rank zero.
-    px = Pixels(42, fbits=0, limit=42)
+    px = Pixels(42, power=0, limit=42)
     assert isinstance(px, pixels_subclass)
-    assert px[...].numerators[()] == 42
-    assert px[()].numerators[()] == 42
+    assert px[...].data[()] == 42
+    assert px[()].data[()] == 42
     # Check all sorts of 1D indexing schemes.
-    px = Pixels([0, 1], fbits=0)
-    assert px[...].numerators[0] == 0
-    assert px[...].numerators[1] == 1
-    assert px[:].numerators[0] == 0
-    assert px[:].numerators[1] == 1
-    assert px[:-1].numerators[0] == 0
-    assert px[::-1].numerators[0] == 1
-    assert px[::-1].numerators[1] == 0
-    assert px[0:1].numerators[0] == 0
-    assert px[1:2].numerators[0] == 1
-    assert px[0].numerators[()] == 0
-    assert px[1].numerators[()] == 1
+    px = Pixels([0, 1], power=0)
+    assert px[...].data[0] == 0
+    assert px[...].data[1] == 1
+    assert px[:].data[0] == 0
+    assert px[:].data[1] == 1
+    assert px[:-1].data[0] == 0
+    assert px[::-1].data[0] == 1
+    assert px[::-1].data[1] == 0
+    assert px[0:1].data[0] == 0
+    assert px[1:2].data[0] == 1
+    assert px[0].data[()] == 0
+    assert px[1].data[()] == 1
     # Check indexing into an array of rank two.
-    px = Pixels([[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]], fbits=0, limit=9)
+    px = Pixels([[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]], power=0, limit=9)
     assert isinstance(px, pixels_subclass)
     for i in range(5):
         row = px[i]
@@ -161,18 +110,18 @@ def test_getitem(pixels_subclass):
 
 def test_permute(pixels_subclass):
     # Rank zero.
-    px = Pixels(42, fbits=0, limit=42)
+    px = Pixels(42, power=0, limit=42)
     isinstance(px, pixels_subclass)
     assert px.permute().to_array()[()] == 42
     # Rank one.
-    px = Pixels([0, 1], fbits=0)
+    px = Pixels([0, 1], power=0)
     assert isinstance(px, pixels_subclass)
     for permutation in [(), (0,)]:
         assert px.permute(*permutation).to_array()[0] == 0
         assert px.permute(*permutation).to_array()[1] == 1
     # Rank two.
     data = [[1, 2], [3, 4]]
-    px = Pixels(data, fbits=0, limit=4)
+    px = Pixels(data, power=0, limit=4)
     assert isinstance(px, pixels_subclass)
     original = px.permute(0, 1)
     flipped = px.permute(1, 0)
@@ -203,7 +152,7 @@ def test_nroadcast_to(pixels_subclass):
         data = list(range(size))
         rank1 = len(shape)
         array1 = SimpleArray(data, shape)
-        px1 = Pixels(array1, limit=max(0, size-1), fbits=0)
+        px1 = Pixels(array1, limit=max(0, size-1), power=0)
         assert isinstance(px1, pixels_subclass)
         for suffix in chain(*[permutations((0, 1, 2, 3), k) for k in range(4)]):
             px2 = px1.broadcast_to(shape + suffix)
@@ -250,20 +199,20 @@ def test_bool(pixels_subclass):
         assert (allfalse ^ alltrue).all()
         assert not (allfalse ^ allfalse).any()
     assert Pixels([[[1, 1]]]).all()
-    assert Pixels([[[0.5, 1.0]]], fbits=1).all()
-    assert not Pixels([[[0.5, 0]]], fbits=0).all()
-    assert not Pixels([[[0.5, 0]]], fbits=0).all()
-    assert Pixels([[[0.5, 0]]], fbits=0).any()
+    assert Pixels([[[0.5, 1.0]]], power=-1).all()
+    assert not Pixels([[[0.5, 0]]], power=0).all()
+    assert not Pixels([[[0.5, 0]]], power=0).all()
+    assert not Pixels([[[0.5, 0]]], power=0).any()
 
 
 def test_shifts(pixels_subclass):
-    px = Pixels(1, fbits=0)
+    px = Pixels(1, power=0)
     assert isinstance(px, pixels_subclass)
     for shift in range(30):
-        assert (px << shift).numerators[()] == 2**shift
-        assert (px >> shift).numerators[()] == 1
-        assert ((px >> shift) << shift).numerators[()] == 1
-        assert ((px << shift) >> shift).numerators[()] == 2**shift
+        assert (px << shift).data[()] == 1
+        assert (px >> shift).data[()] == 1
+        assert ((px >> shift) << shift).data[()] == 1
+        assert ((px << shift) >> shift).data[()] == 1
 
 
 def irange(beg, end, length):
@@ -275,13 +224,13 @@ def generate_pixels(shape) -> list[Pixels]:
     size = math.prod(shape)
     # generate a lot of test data.
     ps: list[Pixels] = []
-    for fbits in (0, 1, 7, 8, 9):
-        white = 2**fbits
+    for power in (0, -1, -7, -8, -9):
+        white = 2**(-power)
         a1 = SimpleArray(irange(0, white+1, size), shape)
         a2 = SimpleArray(irange(white, -1, size), shape)
         a3 = SimpleArray(irange(0, white*3+1, size), shape)
         for a, limit in [(a1, white), (a2, white), (a3, 3*white)]:
-            p = Pixels(a, white=white, limit=limit, fbits=fbits)
+            p = Pixels(a, white=white, limit=limit, power=power)
             ps.append(p)
             if len(shape) > 0:
                 ps.append(p[::-1])
@@ -290,18 +239,18 @@ def generate_pixels(shape) -> list[Pixels]:
     return ps
 
 
-two_arg_test = Callable[[Frac, Frac, Frac], bool]
+two_arg_test = Callable[[float, float, float], bool]
 
 
 def two_arg_map_values(a: Pixels, b: Pixels, r: Pixels, fn: two_arg_test):
     assert a.shape == b.shape == r.shape
-    na, da = a.numerators, a.denominator
-    nb, db = b.numerators, b.denominator
-    nr, dr = r.numerators, r.denominator
+    da, sa = a.data, a.scale
+    db, sb = b.data, b.scale
+    dr, sr = r.data, r.scale
     for index in product(*[range(s) for s in a.shape]):
-        va = frac(na[*index], da)
-        vb = frac(nb[*index], db)
-        vr = frac(nr[*index], dr)
+        va = da[*index] * sa
+        vb = db[*index] * sb
+        vr = dr[*index] * sr
         assert fn(va, vb, vr)
 
 
@@ -324,8 +273,7 @@ def test_two_arg_fns(pixels_subclass):
         # __mul__
         for a, b in product(ps, ps):
             r = a * b
-            n = max(a.fbits, b.fbits)
-            two_arg_map_values(a, b, r, lambda x, y, z: fracround(clip(x * y, 0, 1), n) == z)
+            two_arg_map_values(a, b, r, lambda x, y, z: clip(x * y, 0, 1) - z <= (r.scale / 2))
         # __pow__
         # __truediv__
         # __floordiv__
@@ -361,7 +309,7 @@ def test_rolling_sum(pixels_subclass):
     assert (Pixels(0).rolling_sum(()) == Pixels(0)).all()
     assert (Pixels(1).rolling_sum(()) == Pixels(1)).all()
     # 1D tests
-    px = Pixels([0.00, 0.25, 0.50, 0.75, 1.00], fbits=2)
+    px = Pixels([0.00, 0.25, 0.50, 0.75, 1.00], power=-2)
     rs1 = px.rolling_sum(1)
     rs2 = px.rolling_sum(2)
     rs3 = px.rolling_sum(3)
@@ -370,21 +318,21 @@ def test_rolling_sum(pixels_subclass):
     for rs in [rs1, rs2, rs3, rs4, rs5]:
         assert isinstance(rs, pixels_subclass)
     assert (rs1 == px).all()
-    assert (rs2 == Pixels([0.25, 0.75, 1.25, 1.75], limit=1.75, fbits=2)).all()
-    assert (rs3 == Pixels([0.75, 1.50, 2.25], limit=2.25, fbits=2)).all()
-    assert (rs4 == Pixels([1.50, 2.50], limit=2.5, fbits=2)).all()
-    assert (rs5 == Pixels([2.5], limit=2.5, fbits=2)).all()
+    assert (rs2 == Pixels([0.25, 0.75, 1.25, 1.75], limit=1.75, power=-2)).all()
+    assert (rs3 == Pixels([0.75, 1.50, 2.25], limit=2.25, power=-2)).all()
+    assert (rs4 == Pixels([1.50, 2.50], limit=2.5, power=-2)).all()
+    assert (rs5 == Pixels([2.5], limit=2.5, power=-2)).all()
     # 2D tests
-    px = Pixels([[0, 1, 2], [3, 4, 5], [6, 7, 8]], limit=8, fbits=0)
-    assert (px.rolling_sum((1, 1)) == Pixels([[0, 1, 2], [3, 4, 5], [6, 7, 8]], limit=8, fbits=0)).all()
-    assert (px.rolling_sum((2, 1)) == Pixels([[3, 5, 7], [9, 11, 13]], limit=13, fbits=0)).all()
-    assert (px.rolling_sum((3, 1)) == Pixels([[9, 12, 15]], limit=15, fbits=0)).all()
-    assert (px.rolling_sum((1, 2)) == Pixels([[1, 3], [7, 9], [13, 15]], limit=15, fbits=0)).all()
-    assert (px.rolling_sum((2, 2)) == Pixels([[8, 12], [20, 24]], limit=24, fbits=0)).all()
-    assert (px.rolling_sum((3, 2)) == Pixels([[21, 27]], limit=27, fbits=0)).all()
-    assert (px.rolling_sum((1, 3)) == Pixels([[3], [12], [21]], limit=21, fbits=0)).all()
-    assert (px.rolling_sum((2, 3)) == Pixels([[15], [33]], limit=33, fbits=0)).all()
-    assert (px.rolling_sum((3, 3)) == Pixels([[36]], limit=36, fbits=0)).all()
+    px = Pixels([[0, 1, 2], [3, 4, 5], [6, 7, 8]], limit=8, power=0)
+    assert (px.rolling_sum((1, 1)) == Pixels([[0, 1, 2], [3, 4, 5], [6, 7, 8]], limit=8, power=0)).all()
+    assert (px.rolling_sum((2, 1)) == Pixels([[3, 5, 7], [9, 11, 13]], limit=13, power=0)).all()
+    assert (px.rolling_sum((3, 1)) == Pixels([[9, 12, 15]], limit=15, power=0)).all()
+    assert (px.rolling_sum((1, 2)) == Pixels([[1, 3], [7, 9], [13, 15]], limit=15, power=0)).all()
+    assert (px.rolling_sum((2, 2)) == Pixels([[8, 12], [20, 24]], limit=24, power=0)).all()
+    assert (px.rolling_sum((3, 2)) == Pixels([[21, 27]], limit=27, power=0)).all()
+    assert (px.rolling_sum((1, 3)) == Pixels([[3], [12], [21]], limit=21, power=0)).all()
+    assert (px.rolling_sum((2, 3)) == Pixels([[15], [33]], limit=33, power=0)).all()
+    assert (px.rolling_sum((3, 3)) == Pixels([[36]], limit=36, power=0)).all()
     assert (px.rolling_sum(1) == px.rolling_sum((1,))).all()
     assert (px.rolling_sum(1) == px.rolling_sum((1, 1))).all()
     assert (px.rolling_sum(2) == px.rolling_sum((2,))).all()

@@ -4,7 +4,7 @@ from typing import Callable, Literal, Self
 
 from itertools import product
 
-from math import prod, floor
+from math import prod
 
 import operator
 
@@ -13,7 +13,6 @@ from grayscalelib.core.protocols import ArrayLike, RealLike
 from grayscalelib.core.simplearray import SimpleArray
 
 from grayscalelib.core.pixels import Pixels, set_default_pixels_type
-
 
 class SimplePixels(Pixels):
     """A reference implementation of the Pixels protocol.
@@ -24,8 +23,8 @@ class SimplePixels(Pixels):
     and having no additional dependencies.
     """
     _shape: tuple[int, ...]
-    _ibits: int
-    _fbits: int
+    _power: int
+    _limit: int
     _array: SimpleArray[int]
 
     def _init_(
@@ -34,24 +33,20 @@ class SimplePixels(Pixels):
             black: RealLike,
             white: RealLike,
             limit: RealLike,
-            fbits: int):
+            power: int):
         shape = array.shape
+        scale = 1 / ((white - black) * (2**power))
+        vmax = round((limit - black) * scale)
         values: list[int] = []
-        delta = white - black
-        n, d = delta.as_integer_ratio()
-        mul = (2 << fbits) * d
-        div = 1 if n == 0 else 2 * n
-        nulim = floor(((limit - black) * mul + delta) / div)
         for index in product(*tuple(range(n) for n in shape)):
             clipped = max(0, min(array[index] - black, limit - black))
-            value = int(floor((clipped * mul + delta) / div))
-            assert 0 <= value <= nulim
+            value = round(clipped * scale)
+            assert 0 <= value <= vmax
             values.append(value)
         self._shape = shape
-        self._ibits = max(0, nulim.bit_length() - fbits)
-        self._fbits = fbits
+        self._power = power
+        self._limit = vmax
         self._array = SimpleArray(values, shape)
-        self._nulim = nulim
 
     # The abstract Pixels class has an encoding priority of zero.  By returning
     # one here, we ensure that this reference implementation takes precedence.
@@ -64,52 +59,48 @@ class SimplePixels(Pixels):
         return self._shape
 
     @property
-    def ibits(self) -> int:
-        return self._ibits
+    def power(self) -> int:
+        return self._power
 
     @property
-    def fbits(self) -> int:
-        return self._fbits
-
-    @property
-    def numerators(self) -> SimpleArray[int]:
+    def data(self):
         return self._array
 
     @property
-    def nulim(self) -> int:
-        return self._nulim
+    def limit(self) -> int:
+        return self._limit
 
     def to_array(self) -> SimpleArray[float]:
-        d = self.denominator
-        values = list(map(lambda n: n / d, self._array.values))
+        factor = 2**self.power
+        values = list(map(lambda n: n * factor, self._array.values))
         return SimpleArray(values, self.shape)
 
     def _getitem_(self, index) -> Self:
-        nulim = self._nulim
-        fbits = self._fbits
+        power = self._power
+        limit = self._limit
         array = self._array
         selection = array[index]
         if selection is array:
             return self
         if isinstance(selection, int):
             selection = SimpleArray([selection], ())
-        return self.from_numerators(selection, nulim, fbits)
+        return self.from_data(selection, power, limit)
 
     def _permute_(self, permutation) -> Self:
-        nulim = self._nulim
-        fbits = self._fbits
+        power = self._power
+        limit = self._limit
         array = self._array
-        return type(self).from_numerators(array.permute(permutation), nulim, fbits)
+        return type(self).from_data(array.permute(permutation), power, limit)
 
     def _reshape_(self, shape) -> Self:
-        nulim = self._nulim
-        fbits = self._fbits
+        power = self._power
+        limit = self._limit
         array = SimpleArray(self._array.values, shape)
-        return type(self).from_numerators(array, nulim, fbits)
+        return type(self).from_data(array, power, limit)
 
     def _broadcast_to_(self, shape) -> Self:
-        nulim = self._nulim
-        fbits = self._fbits
+        limit = self._limit
+        power = self._power
         array = self._array
         old_shape = self._shape
         new_shape = shape
@@ -118,7 +109,7 @@ class SimplePixels(Pixels):
         for value in array.values:
             new_values.extend([value] * growth)
         new_array = SimpleArray(new_values, new_shape)
-        return type(self).from_numerators(new_array, nulim, fbits)
+        return type(self).from_data(new_array, power, limit)
 
     def _any_(self) -> bool:
         return any(v > 0 for v in self._array.values)
@@ -126,85 +117,73 @@ class SimplePixels(Pixels):
     def _all_(self) -> bool:
         return all(v > 0 for v in self._array.values)
 
-    def _map1(self, nulim, fbits, fn) -> Self:
+    def _map1(self, power, limit, fn) -> Self:
         array = self._array
-        return type(self).from_numerators(array.map1(fn), nulim, fbits)
+        return type(self).from_data(array.map1(fn), power, limit)
 
-    def _map2(self, other, nulim, fbits, fn) -> Self:
+    def _map2(self, other, power, limit, fn) -> Self:
         array = self._array
-        return type(self).from_numerators(array.map2(fn, other._array), nulim, fbits)
+        return type(self).from_data(array.map2(fn, other._array), power, limit)
 
     def _and_(self, other: SimplePixels) -> Self:
-        return self._map2(other, 1, 0, pixel_and)
+        return self._map2(other, 0, 1, pixel_and)
 
     def _or_(self, other: SimplePixels) -> Self:
-        return self._map2(other, 1, 0, pixel_or)
+        return self._map2(other, 0, 1, pixel_or)
 
     def _xor_(self, other: SimplePixels) -> Self:
-        return self._map2(other, 1, 0, pixel_xor)
+        return self._map2(other, 0, 1, pixel_xor)
 
     def _lshift_(self, amount: int) -> Self:
-        fbits = max(0, self.fbits - amount)
-        shift = max(0, amount - self.fbits)
-        nulim = self.nulim << shift
-        return self._map1(nulim, fbits, lambda x: x << shift)
+        return type(self).from_data(self.data, self.power + amount, self.limit)
 
     def _rshift_(self, amount: int) -> Self:
-        nulim = self.nulim
-        fbits = self.fbits + amount
-        return self._map1(nulim, fbits, lambda x: x)
+        return type(self).from_data(self.data, self.power - amount, self.limit)
 
     def _invert_(self) -> Self:
-        nulim = self._nulim
-        fbits = self._fbits
-        d = self.denominator
-        return self._map1(nulim, fbits, lambda x: max(0, d - x))
+        if self.power <= 0:
+            power = self.power
+            white = self.white
+            return self._map1(power, white, lambda x: max(0, white - x))
+        else: # self.power > 0
+            power = 0
+            white = 1
+            return self._map1(power, white, lambda x: 1 if x == 0 else 0)
 
     def _add_(self, other: Self) -> Self:
-        xfbits = self.fbits
-        yfbits = other.fbits
-        fbits = max(self.fbits, other.fbits)
-        white = (1 << fbits)
-        nulim = min(white, self.nulim + other.nulim)
-        if xfbits == yfbits:
-            fn = lambda x, y: min(x + y, white)
-        elif xfbits < yfbits:
-            shift = yfbits - xfbits
-            fn = lambda x, y: min((x << shift) + y, white)
-        else:
-            shift = xfbits - yfbits
-            fn = lambda x, y: min(x + (y << shift), white)
-        return self._map2(other, nulim, fbits, fn)
+        xpower, ypower = self.power, other.power
+        xlimit, ylimit = self.limit, other.limit
+        power = min(xpower, ypower, 0)
+        limit = min(round(xlimit * 2**(power - xpower) +
+                          ylimit * 2**(power - ypower)),
+                    2**(-power))
+        xshift = xpower - power
+        yshift = ypower - power
+        fn = lambda x, y: min((x << xshift) + (y << yshift), limit)
+        return self._map2(other, power, limit, fn)
 
     def _sub_(self, other: Self) -> Self:
-        xfbits = self.fbits
-        yfbits = other.fbits
-        fbits = max(self.fbits, other.fbits)
-        white = (1 << fbits)
-        if xfbits == yfbits:
-            nulim = min(self._nulim, white)
-            fn = lambda x, y: max(0, min(x - y, white))
-        elif xfbits < yfbits:
-            shift = yfbits - xfbits
-            nulim = min(self._nulim << shift, white)
-            fn = lambda x, y: max(0, min((x << shift) - y, white))
-        else:
-            nulim = min(self._nulim, white)
-            shift = xfbits - yfbits
-            fn = lambda x, y: max(0, min(x - (y << shift), white))
-        return self._map2(other, nulim, fbits, fn)
+        xpower, ypower = self.power, other.power
+        xlimit = self.limit
+        power = min(xpower, ypower, 0)
+        limit = min(round(xlimit * 2**(xpower - power)), 2**(-power))
+        xshift = xpower - power
+        yshift = ypower - power
+        fn = lambda x, y: max(0, (x << xshift) - (y << yshift))
+        return self._map2(other, power, limit, fn)
 
     def _mul_(self, other: Self) -> Self:
-        xfbits = self.fbits
-        yfbits = other.fbits
-        if xfbits <= yfbits:
-            fbits = yfbits
-            strip = xfbits
+        xpower, ypower = self.power, other.power
+        power = min(xpower, ypower, 0)
+        limit = 2**(-power)
+        # x*2^xpower * y*2^ypower = x*y*2^(xpower + ypower)
+        #                         = x*y*2^(xpower + ypower - power) * 2^power
+        factor = 2**((xpower + ypower) - power)
+        if isinstance(factor, int):
+            fn = lambda x, y: min(x * y * factor, limit)
         else:
-            fbits = xfbits
-            strip = yfbits
-        white = (1 << fbits)
-        return self._map2(other, white, fbits, lambda x, y: min(strip_bits(x * y, strip), white))
+            fn = lambda x, y: min(round(x * y * factor), limit)
+        return self._map2(other, power, limit, fn)
 
     def _pow_(self, power: Self) -> Self:
         raise NotImplementedError()
@@ -219,17 +198,16 @@ class SimplePixels(Pixels):
         raise NotImplementedError()
 
     def _cmp(self, other: Self, op: Callable[[int, int], Literal[0, 1]]) -> Self:
-        xfbits = self.fbits
-        yfbits = other.fbits
-        if xfbits == yfbits:
+        xpower, ypower = self.power, other.power
+        if xpower == ypower:
             fn = lambda x, y: op(x, y)
-        elif xfbits < yfbits:
-            shift = yfbits - xfbits
-            fn = lambda x, y: op(x << shift, y)
-        else:
-            shift = xfbits - yfbits
+        elif xpower < ypower:
+            shift = ypower - xpower
             fn = lambda x, y: op(x, y << shift)
-        return self._map2(other, 1, 0, fn)
+        else: # ypower < xpower
+            shift = xpower - ypower
+            fn = lambda x, y: op(x << shift, y)
+        return self._map2(other, 0, 1, fn)
 
     def _lt_(self, other: Self) -> Self:
         return self._cmp(other, operator.lt)
@@ -274,8 +252,8 @@ class SimplePixels(Pixels):
                         sums[pos] += array.item((*prefix, index+window_size-1, *suffix))
                     values.extend(sums)
             array = SimpleArray(values, shape[:axis] + (newsize,) + shape[axis+1:])
-        nulim = prod(window_sizes) * self.nulim
-        return self.from_numerators(array, nulim, self.fbits)
+        limit = prod(window_sizes) * self.limit
+        return self.from_data(array, self.power, limit)
 
 
 def pixel_not(x) -> Literal[0, 1]:

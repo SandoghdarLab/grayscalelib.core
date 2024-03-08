@@ -4,7 +4,7 @@ from abc import abstractmethod
 
 from contextlib import contextmanager
 
-from math import floor, prod
+from math import prod
 
 from types import EllipsisType
 
@@ -21,7 +21,7 @@ _mandatory_pixels_type: type[Pixels] | None = None
 
 _default_pixels_type: type[Pixels] | None = None
 
-_default_fbits: int = 12
+_default_power: int = -12
 
 
 def set_default_pixels_type(cls: type[Pixels]):
@@ -69,18 +69,18 @@ def default_pixels_type(pt: type[Pixels], /):
 
 
 @contextmanager
-def default_fbits(fbits: int):
+def default_power(power: int):
     """
-    Create a context in which the supplied number of fractional bits
-    is the default when constructing pixels.
+    Create a context in which the supplied power is the default when
+    constructing pixels.
     """
-    global _default_fbits
-    previous = _default_fbits
-    _default_fbits = fbits
+    global _default_power
+    previous = _default_power
+    _default_power = power
     try:
-        yield fbits
+        yield power
     finally:
-        _default_fbits = previous
+        _default_power = previous
 
 
 class Pixels(Encodable):
@@ -88,11 +88,10 @@ class Pixels(Encodable):
 
     This class describes an abstract protocol for working with grayscale data.
     It supports working with individual values, vectors of values, images of
-    values, videos of values, and stacks thereof.  Each individual value is
-    represented using a fixed-point fractional encoding in base two, with some
-    number of bits describing the integer part of the encoding, and another
-    number of bits describing the fractional part.  The number of integer bits
-    and fractional bits must be the same for all values in the container.
+    values, videos of values, and stacks thereof.  Each pixel value is encoded
+    in the form datum*(2**power), where datum is an integer that may be
+    different for each pixel, and power is an integer that is the same for all
+    pixels.
     """
     def __new__(cls, data, **kwargs):
         # If someone attempts to instantiate the abstract pixels base class,
@@ -111,7 +110,7 @@ class Pixels(Encodable):
             black: RealLike = 0,
             white: RealLike = 1,
             limit: RealLike | None = None,
-            fbits: int | None = None):
+            power: int | None = None):
         """
         Initialize a Pixels container, based on the supplied arguments.
 
@@ -134,32 +133,31 @@ class Pixels(Encodable):
         limit: real
             The number at which input data saturates.  Defaults to white, but can
             be set to a higher value to allow for pixel values larger than one.
-        fbits: int, optional
-            The number of bits of fractional precision of the resulting pixels.
-            Defaults to the maximum fractional precision of any item in the data
-            parameter.
+        power: int, optional
+            The exponent in the datum*(2**power) encoding of each pixel value.
+            Most pixel operations clip their result to the [0, 1] interval, so
+            power values are usually be negative.  A power of -1 means pixel
+            values can be represented with a precision of 0.5, and a power of -3
+            means that values can be represented with a precision of 0.125.
         """
+        if power is None:
+            power = _default_power
         if limit is None:
             limit = white
-        if not (black <= white):
-            raise ValueError("Black must be less than or equal to white.")
+        if not (black < white):
+            raise ValueError("Black must be less than white.")
         if not (black <= limit):
             raise ValueError("Black must be less than or equal to limit.")
-        if (black == white) and (white != limit):
-            raise ValueError("Cannot set explicit limit when black equals white.")
-        if fbits is None:
-            fbits = _default_fbits
-        if fbits < 0:
-            raise ValueError("The number of fractional bits must be non-negative.")
         array = coerce_to_array(data)
-        self._init_(array, black, white, limit, fbits)
+        self._init_(array, black, white, limit, power)
         # Ensure the container was initialized correctly.
         assert self.shape == array.shape
-        assert self.fbits == fbits
+        assert self.power == power
+        assert self.limit == round((limit - black) / ((white - black) * (2**power)))
 
     @classmethod
-    def from_numerators(cls, array: ArrayLike, limit: int, fbits: int):
-        return cls(array, white=(1 << fbits), limit=limit, fbits=fbits)
+    def from_data(cls, data: ArrayLike, power: int, limit: int):
+        return cls(data, white=2**(-power), power=power, limit=limit)
 
     @abstractmethod
     def _init_(
@@ -168,7 +166,7 @@ class Pixels(Encodable):
             black: RealLike,
             white: RealLike,
             limit: RealLike,
-            fbits: int):
+            power: int):
         """
         Initialize the supplied pixels based on the supplied parameters.  This
         method is called by __init__ after ensuring that all supplied arguments
@@ -185,44 +183,56 @@ class Pixels(Encodable):
         ...
 
     @property
-    def ibits(self) -> int:
-        """
-        The number of bits of precision of the integer part of each pixel
-        value.
-        """
-        return max(0, self.nulim.bit_length() - self.fbits)
-
-    @property
     @abstractmethod
-    def fbits(self) -> int:
+    def power(self) -> int:
         """
-        The number of bits of precision of the fractional part of each pixel
-        value.
+        The power of two that is multiplied with each internal datum to produce
+        a pixel's value.
         """
         ...
 
     @property
-    def denominator(self) -> int:
+    def scale(self) -> float:
         """
-        The denominator of the internal fractional encoding of each pixel
-        value.
+        The minimum possible interval between any two differing pixel values.
         """
-        return (1 << self.fbits)
+        return 2.0 ** self.power
 
     @property
     @abstractmethod
-    def numerators(self) -> ArrayLike:
+    def data(self) -> ArrayLike:
         """
-        A read-only array of integers of the same shape as the pixels, whose
-        values are the numerators of each pixel value.
+        A read-only array of integers of the same shape as the pixels, that
+        contains the pixel values before they have been multiplied with
+        2**power.
         """
-        pass
+        ...
+
+    @property
+    def black(self) -> int:
+        """
+        The smallest integer that may appear in any pixel datum.
+        """
+        return 0
+
+    @property
+    def white(self) -> int:
+        """
+        The pixel datum that corresponds to a value of one.
+
+        Raises an error if the power of the container is positive, because such
+        an encoding cannot describe a value of one precisely anymore.
+        """
+        if self.power <= 0:
+            return 2**(-self.power)
+        else:
+            raise RuntimeError("Pixels with positive power have no exact white.")
 
     @property
     @abstractmethod
-    def nulim(self) -> int:
+    def limit(self) -> int:
         """
-        The largest numerator that may appear in any pixel.
+        The largest integer that may appear in any pixel datum.
         """
         ...
 
@@ -243,14 +253,11 @@ class Pixels(Encodable):
 
     def __repr__(self) -> str:
         """
-        A textual representation for this container.
+        A textual representation of this container.
         """
         name = type(self).__name__
-        data = coerce_to_nested_sequence(self.numerators)
-        if self.nulim == self.denominator:
-            return f"{name}({data}, shape={self.shape}, fbits={self.fbits})"
-        else:
-            return f"{name}({data}, shape={self.shape}, fbits={self.fbits}, nulim={self.nulim})"
+        data = coerce_to_nested_sequence(self.data)
+        return f"{name}({data}, shape={self.shape}, power={self.power}, limit={self.limit})"
 
     @abstractmethod
     def to_array(self) -> ArrayLike:
@@ -259,7 +266,9 @@ class Pixels(Encodable):
     # getitem
 
     def __getitem__(self: Pixels, index: EllipsisType | int | slice | tuple[int | slice, ...]) -> Pixels:
-        """Select a particular index or slice of one or  more axes."""
+        """
+        Select a part of the supplied container.
+        """
         return self._getitem_(canonicalize_index(index, self.shape))
 
     def _getitem_(self, index: tuple[int | slice, ...]) -> Pixels:
@@ -270,7 +279,7 @@ class Pixels(Encodable):
 
     def permute(self, p0: int | tuple = (), /, *more: int) -> Pixels:
         """
-        Reorder all axes according to the supplied integers.
+        Reorder all axes according to the supplied axis numbers.
         """
         if isinstance(p0, tuple):
             permutation = p0 + more
@@ -316,6 +325,8 @@ class Pixels(Encodable):
         cls = encoding(type(self))
         result = encode_as(self, cls)._reshape_(shape)
         assert result.shape == shape
+        assert result.power == self.power
+        assert result.limit == self.limit
         return result
 
     def _reshape_(self, shape: tuple[int, ...]) -> Self:
@@ -330,8 +341,8 @@ class Pixels(Encodable):
         """
         result = self._broadcast_to_(shape)
         assert result.shape == shape
-        assert result.ibits == self.ibits
-        assert result.fbits == self.fbits
+        assert result.power == self.power
+        assert result.limit == self.limit
         return result
 
     def _broadcast_to_(self, shape: tuple[int, ...]) -> Pixels:
@@ -344,7 +355,9 @@ class Pixels(Encodable):
         raise RuntimeError("Never boolify Pixels, use .any() or .all() instead.")
 
     def any(self) -> bool:
-        """Whether at least one pixel in the container has a non-zero value."""
+        """
+        Whether at least one pixel in the container has a non-zero value.
+        """
         cls = encoding(type(self))
         result = encode_as(self, cls)._any_()
         assert result is True or result is False
@@ -354,7 +367,9 @@ class Pixels(Encodable):
         raise MissingMethod(self, "testing for any-non-zero")
 
     def all(self) -> bool:
-        """Whether all pixels in the container have a non-zero value."""
+        """
+        Whether all pixels in the container have a non-zero value.
+        """
         cls = encoding(type(self))
         result = encode_as(self, cls)._all_()
         assert result is True or result is False
@@ -370,13 +385,13 @@ class Pixels(Encodable):
         """
         The logical conjunction of the two supplied containers.
 
-        The resulting container has one integer bit, and zero fractional bits.
+        The resulting container has a power of zero and a limit of zero or one.
         """
         a, b = broadcast(self, other)
         result = a._and_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
-        assert result.fbits == 0
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     __rand__ = __and__  # and is symmetric
@@ -391,13 +406,13 @@ class Pixels(Encodable):
         """
         The logical disjunction of the two supplied containers.
 
-        The resulting container has one integer bit, and zero fractional bits.
+        The resulting container has a power of zero and a limit of zero or one.
         """
         a, b = broadcast(self, other)
         result = a._or_(b)
         assert result.shape == a.shape
-        assert result.ibits == 1
-        assert result.fbits == 0
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     __ror__ = __or__ # or is symmetric
@@ -409,10 +424,16 @@ class Pixels(Encodable):
     # xor
 
     def __xor__(self, other) -> Pixels:
-        """The exclusive disjunction of the two supplied containers."""
+        """
+        The exclusive disjunction of the two supplied containers.
+
+        The resulting container has a power of zero and a limit of zero or one.
+        """
         a, b = broadcast(self, other)
         result = a._xor_(b)
         assert result.shape == a.shape
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     __rxor__ = __or__ # xor is symmetric
@@ -427,23 +448,26 @@ class Pixels(Encodable):
         """
         Multiply each value by two to the power of the supplied amount.
 
-        While shifting, move the specified amount of bits from the fractional
-        part of the encoding to the integer part of the encoding.
+        The power of the result is the power of the supplied container plus the
+        supplied amount.
         """
         # Ensure the amount is non-negative.
         if amount < 0:
             return self >> -amount
         cls = encoding(type(self))
         pix = encode_as(self, cls)
+        # Handle the trivial case where the amount is zero.
         if amount == 0:
             return pix
         result = pix._lshift_(amount)
         assert result.shape == self.shape
+        assert result.power == self.power + amount
+        assert result.limit == self.limit
         return result
 
     def _lshift_(self: Self, amount: int) -> Self:
         _ = amount
-        raise MissingMethod(self, "increasing the precision of")
+        raise MissingMethod(self, "increasing the scale of")
 
     # rshift
 
@@ -451,8 +475,8 @@ class Pixels(Encodable):
         """
         Divide each value by two to the power of the supplied amount.
 
-        While shifting, add the specified amount of bits to the fractional part
-        of the encoding.
+        The power of the result is the power of the supplied container minus
+        the supplied amount.
         """
         # Ensure the amount is non-negative.
         if amount < 0:
@@ -463,43 +487,43 @@ class Pixels(Encodable):
             return pix
         result = pix._rshift_(amount)
         assert result.shape == self.shape
+        assert result.power == self.power - amount
+        assert result.limit == self.limit
         return result
 
     def _rshift_(self: Self, amount: int) -> Self:
         _ = amount
-        raise MissingMethod(self, "decreasing the precision of")
+        raise MissingMethod(self, "decreasing the scale of")
 
     # abs
 
     def __abs__(self) -> Pixels:
         """
-        Do nothing, since pixels are never negative.
+        Do nothing, since pixels are non-negative by definition.
         """
         cls = encoding(type(self))
-        result = encode_as(self, cls)._abs_()
+        result = encode_as(self, cls)
         assert result.shape == self.shape
-        assert result.ibits == self.ibits
-        assert result.fbits == self.fbits
+        assert result.power == self.power
+        assert result.limit == self.limit
         return result
-
-    def _abs_(self: Self) -> Self:
-        # Pixels are non-negative by definition
-        return self
 
     # invert
 
     def __invert__(self) -> Pixels:
         """
-        One minus the original value.
+        One minus the original value, clipped to [0, 1]
 
-        The resulting container has one integer bit, and the same amount of
-        fractional bits as the original one.
+        The resulting container has the same power of P = min(power, 0), and a
+        limit of 2**abs(P).
         """
         cls = encoding(type(self))
         result = encode_as(self, cls)._invert_()
+        power = min(self.power, 0)
+        limit = 2**abs(power)
         assert result.shape == self.shape
-        assert result.ibits == 1
-        assert result.fbits == self.fbits
+        assert result.power == power
+        assert result.limit == limit
         return result
 
     def _invert_(self) -> Self:
@@ -507,15 +531,15 @@ class Pixels(Encodable):
 
     # neg
 
-    # This is a weird operator for pixels.  The rule is that each pixel math
-    # operation is carried out just as expected, but the result is clipped to
-    # the [0, 1] interval.  For negation, this means that the resulting array
-    # is all zero.
     def __neg__(self) -> Pixels:
         """
         Return zeros of the same shape.
+
+        This is a weird operator for pixels.  The convention is that the result
+        of each pixel math operation is clipped to the [0, 1] interval.  For
+        negation, this means that the resulting array is all zero.
         """
-        return type(self)(0, ibits=0, fbits=self.fbits).broadcast_to(self.shape)
+        return type(self)(0, power=self.power, limit=0).broadcast_to(self.shape)
 
     # pos
 
@@ -524,15 +548,11 @@ class Pixels(Encodable):
         Do nothing, since pixels are non-negative by definition.
         """
         cls = encoding(type(self))
-        result = encode_as(self, cls)._pos_()
+        result = encode_as(self, cls)
         assert result.shape == self.shape
-        assert result.ibits == self.ibits
-        assert result.fbits == self.fbits
+        assert result.limit == self.limit
+        assert result.power == self.power
         return result
-
-    def _pos_(self: Self) -> Self:
-        # Pixels are non-negative by definition.
-        return self
 
     # add
 
@@ -540,15 +560,20 @@ class Pixels(Encodable):
         """
         Add the values of the two containers and clip the result to [0, 1].
 
-        The result of this operation has at most one integer bit, and a number
-        of fractional bits that is the maximum of the numbers of fractional
-        bits of the two arguments.
+        The result of the addition of two containers A and B has a power of P =
+        min(A.power, B.power, 0), and a limit that is the minimum of
+        round(A.limit * 2**(P - A.power) + B.limit * 2**(P - B.power)) and
+        2**abs(P).
         """
         a, b = broadcast(self, other)
         result = a._add_(b)
+        power = min(a.power, b.power, 0)
+        limit = min(round(a.limit * 2**(power - a.power) +
+                          b.limit * 2**(power - b.power)),
+                    2**abs(power))
         assert result.shape == a.shape
-        assert result.ibits <= 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == power
+        assert result.limit == limit
         return result
 
     __radd__ = __add__# add is symmetric
@@ -564,23 +589,27 @@ class Pixels(Encodable):
         Subtract the values of the two containers and clip the result to the
         interval [0, 1].
 
-        The result of this operation has at most one integer bit, and a number
-        of fractional bits that is the maximum of the numbers of fractional
-        bits of the two arguments.
+        The result of the subtraction of two containers A and B has a power of
+        P = min(A.power, B.power, 0), and a limit that is the minimum of
+        round(A.limit * 2**(P - a.power)) and 2**abs(P).
         """
         a, b = broadcast(self, other)
         result = a._sub_(b)
+        power = min(a.power, b.power, 0)
+        limit = min(round(a.limit * 2**(a.power - power)), 2**abs(power))
         assert result.shape == a.shape
-        assert result.ibits <= 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == power
+        assert result.limit == limit
         return result
 
     def __rsub__(self, other):
         b, a = broadcast(self, other)
         result = a._sub_(b)
+        power = min(a.power, b.power)
+        limit = a.limit * 2**(power - a.power)
         assert result.shape == a.shape
-        assert result.ibits <= 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == power
+        assert result.limit == limit
         return result
 
     def _sub_(self: Self, other: Self) -> Self:
@@ -591,17 +620,18 @@ class Pixels(Encodable):
 
     def __mul__(self, other) -> Pixels:
         """
-        Add the values of the two containers and clip the result to [0, 1].
+        Multiply the values of the containers and clip the result to [0, 1].
 
-        The result of this operation has at most one integer bit, and a number
-        of fractional bits that is the maximum of the numbers of fractional
-        bits of the two arguments.
+        The result of the multiplication of some containers A and B has the
+        power of P = min(A.power, B.power, 0), and a limit of 2**abs(P)
         """
         a, b = broadcast(self, other)
         result = a._mul_(b)
+        power = min(a.power, b.power, 0)
+        limit = 2**abs(power)
         assert result.shape == a.shape
-        assert result.ibits <= 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == power
+        assert result.limit == limit
         return result
 
     __rmul__ = __mul__ # mul is symmetric
@@ -616,15 +646,16 @@ class Pixels(Encodable):
         """
         Raise each value to the specified power, and clip the result to [0, 1].
 
-        The result of this operation has at most integer bit, and a number of
-        fractional bits that is the maximum of the numbers of fractional bits
-        of the two arguments.
+        The resulting of A**B has a power of P = min(A.power, B.power, 0), and
+        a limit of 2**abs(P).
         """
         a, b = broadcast(self, power)
         result = a._pow_(b)
+        power = min(a.power, b.power, 0)
+        limit = 2**abs(power)
         assert result.shape == self.shape
-        assert result.ibits <= 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == power
+        assert result.limit == limit
         return result
 
     def _pow_(self: Self, power: Self) -> Self:
@@ -637,22 +668,24 @@ class Pixels(Encodable):
         """
         Divide the values of the two containers and clip the result to [0, 1].
 
-        The result of this operation has exactly one integer bit, and a number
-        of fractional bits that is the maximum of the numbers of fractional
-        bits of the two arguments.
+        The power P of A/B is min(0, A.power - B.power + ceil(log2(B.limit))),
+        and the corresponding limit is 2**abs(P).
         """
         a, b = broadcast(self, other)
         result = a._truediv_(b)
+        power = min(0, a.power - b.power + b.limit.bit_length())
         assert result.shape == a.shape
-        assert result.ibits == 1
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == power
+        assert result.limit == 2**abs(power)
         return result
 
     def __rtruediv__(self, other) -> Pixels:
         b, a = broadcast(self, other)
         result = a._truediv_(b)
+        power = min(0, a.power - b.power + b.limit.bit_length())
         assert result.shape == a.shape
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == power
+        assert result.limit == 2**abs(power)
         return result
 
     def _truediv_(self: Self, other: Self) -> Self:
@@ -663,23 +696,23 @@ class Pixels(Encodable):
 
     def __floordiv__(self, other) -> Pixels:
         """
-        Divide the values of the two containers and clip the result to [0, 1].
+        Zero wherever the division is less than one, one otherwise.
 
-        The result of this operation has exactly one integer bit, and a number
-        of fractional bits that is the maximum of the numbers of fractional
-        bits of the two arguments.
+        The result has a power of zero and a limit of at most one.
         """
         a, b = broadcast(self, other)
         result = a._floordiv_(b)
         assert result.shape == a.shape
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     def __rfloordiv__(self, other) -> Pixels:
         b, a = broadcast(self, other)
         result = a._floordiv_(b)
         assert result.shape == a.shape
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     def _floordiv_(self: Self, other: Self) -> Self:
@@ -692,21 +725,25 @@ class Pixels(Encodable):
         """
         Left value modulo right value, clipped to [0, 1].
 
-        The result of this operation has exactly one integer bit, and a number
-        of fractional bits that is the maximum of the numbers of fractional
-        bits of the two arguments.
+        For any containers A and B, we have (A // B) + (A % B) == A.clip(0, 1).
         """
         a, b = broadcast(self, other)
         result = a._mod_(b)
+        power = min(a.power, b.power, 0)
+        limit = 2**abs(power)
         assert result.shape == a.shape
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == power
+        assert result.limit == limit
         return result
 
     def __rmod__(self, other) -> Pixels:
         b, a = broadcast(self, other)
         result = a._mod_(b)
+        power = min(a.power, b.power, 0)
+        limit = 2**abs(power)
         assert result.shape == a.shape
-        assert result.fbits == max(a.fbits, b.fbits)
+        assert result.power == power
+        assert result.limit == limit
         return result
 
     def _mod_(self: Self, other: Self) -> Self:
@@ -724,7 +761,8 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._lt_(b)
         assert result.shape == a.shape
-        assert result.fbits == 0
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     def _lt_(self: Self, other: Self) -> Self:
@@ -742,7 +780,8 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._gt_(b)
         assert result.shape == a.shape
-        assert result.fbits == 0
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     def _gt_(self: Self, other: Self) -> Self:
@@ -760,7 +799,8 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._le_(b)
         assert result.shape == a.shape
-        assert result.fbits == 0
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     def _le_(self: Self, other: Self) -> Self:
@@ -779,7 +819,8 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._ge_(b)
         assert result.shape == a.shape
-        assert result.fbits == 0
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     def _ge_(self: Self, other: Self) -> Self:
@@ -796,7 +837,8 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._eq_(b)
         assert result.shape == a.shape
-        assert result.fbits == 0
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     def _eq_(self: Self, other: Self) -> Self:
@@ -814,7 +856,8 @@ class Pixels(Encodable):
         a, b = broadcast(self, other)
         result = a._ne_(b)
         assert result.shape == a.shape
-        assert result.fbits == 0
+        assert result.power == 0
+        assert result.limit <= 1
         return result
 
     def _ne_(self: Self, other: Self) -> Self:
@@ -845,8 +888,8 @@ class Pixels(Encodable):
         cls = encoding(type(self))
         result = encode_as(self, cls)._rolling_sum_(window_sizes)
         assert result.shape == tuple((s - w + 1) for s, w in zip(self.shape, window_sizes))
-        assert result.nulim == prod(window_sizes) * self.nulim
-        assert result.fbits == self.fbits
+        assert result.limit == prod(window_sizes) * self.limit
+        assert result.power == self.power
         return result
 
     def _rolling_sum_(self, window_sizes: tuple[int, ...]) -> Self:
@@ -898,8 +941,8 @@ class Pixels(Encodable):
         cls = encoding(type(self))
         result = encode_as(self, cls)._rolling_median_(window_sizes)
         assert result.shape == tuple((s - w + 1) for s, w in zip(self.shape, window_sizes))
-        assert result.nulim == self.nulim
-        assert result.fbits == self.fbits
+        assert result.limit == self.limit
+        assert result.power == self.power
         return result
 
     def _rolling_median_(self, window_sizes: tuple[int, ...]) -> Self:
@@ -1068,8 +1111,8 @@ def broadcast(a, b) -> tuple[Pixels, Pixels]:
     Ensure the two supplied containers have the same shape and class.
 
     If either argument is not a pixels container but a real number, convert it
-    to a suitable container with the same fractional precision as the other
-    one.  If both arguments are real numbers, raise an error.
+    to a suitable container with the same power as the other one.  If both
+    arguments are real numbers, raise an error.
     """
     if isinstance(a, Pixels):
         if isinstance(b, Pixels):
@@ -1081,13 +1124,13 @@ def broadcast(a, b) -> tuple[Pixels, Pixels]:
         else:
             cls = encoding(type(a))
             pxa = encode_as(a, cls)
-            pxb = cls(b, fbits=pxa.fbits, limit=min(1, b))
+            pxb = cls(b, power=pxa.power, limit=min(1, b))
             return (pxa, pxb.broadcast_to(pxa.shape))
     else:
         if isinstance(b, Pixels):
             cls = encoding(type(b))
             pxb = encode_as(b, cls)
-            pxa = cls(a, fbits=pxb.fbits, limit=min(1, a))
+            pxa = cls(a, power=pxb.power, limit=min(1, a))
             return (pxa.broadcast_to(pxb.shape), pxb)
         else:
             raise TypeError("Cannot broadcast two scalars.")
