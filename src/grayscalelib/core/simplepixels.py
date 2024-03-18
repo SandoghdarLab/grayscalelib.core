@@ -185,8 +185,15 @@ class SimplePixels(Pixels):
             fn = lambda x, y: min(round(x * y * factor), limit)
         return self._map2(other, power, limit, fn)
 
-    def _pow_(self, power: Self) -> Self:
-        raise NotImplementedError()
+    def _pow_(self, other: float) -> Self:
+        xpower, xlimit, y = self.power, self.limit, other
+        power = min(xpower, 0)
+        # v * 2^power = (x * 2^xpower)^y
+        #           v = x^y * 2^(y * xpower - power)
+        factor = 2**(y * xpower - power)
+        limit = min(2**abs(power), round(xlimit**y * factor))
+        fn = lambda x: min(round(x**y * factor), limit)
+        return self._map1(power, limit, fn)
 
     def _truediv_(self, other: Self) -> Self:
         raise NotImplementedError()

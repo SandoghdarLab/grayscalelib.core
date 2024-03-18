@@ -642,24 +642,26 @@ class Pixels(Encodable):
 
     # pow
 
-    def __pow__(self, power) -> Pixels:
+    def __pow__(self, exponent: RealLike) -> Pixels:
         """
         Raise each value to the specified power, and clip the result to [0, 1].
 
-        The resulting of A**B has a power of P = min(A.power, B.power, 0), and
-        a limit of 2**abs(P).
+        The result of X**Y has a power P = min(X.power, 0), and a limit of
+        min(2**abs(P), round((X.limit ** Y) * (Y * 2**(Y * X.power - P)))).
         """
-        a, b = broadcast(self, power)
-        result = a._pow_(b)
-        power = min(a.power, b.power, 0)
-        limit = 2**abs(power)
+        cls = encoding(type(self))
+        X = encode_as(self, cls)
+        Y = float(exponent)
+        power = min(X.power, 0)
+        limit = min(2**abs(power), round((X.limit ** Y) * 2**(Y * X.power - power)))
+        result = X._pow_(Y)
         assert result.shape == self.shape
         assert result.power == power
         assert result.limit == limit
         return result
 
-    def _pow_(self: Self, power: Self) -> Self:
-        _ = power
+    def _pow_(self: Self, other: float) -> Self:
+        _ = other
         raise MissingMethod(self, "exponentiating")
 
     # truediv
