@@ -242,6 +242,8 @@ def generate_pixels(shape) -> list[Pixels]:
 def test_pow(pixels_subclass):
     a = Pixels(0.5, power=-2)
     b = Pixels(1.0, power=-2)
+    assert isinstance(a, pixels_subclass)
+    assert isinstance(b, pixels_subclass)
     assert (a ** 1).data[()] == 2
     assert (a ** 2).data[()] == 1
     assert (a ** 3).data[()] == 0

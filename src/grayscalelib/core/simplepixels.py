@@ -197,7 +197,7 @@ class SimplePixels(Pixels):
 
     def _truediv_(self, other: Self) -> Self:
         xpower, ypower = self.power, other.power
-        power = min(0, xpower - ypower + ceil(log2(other.limit)))
+        power = min(0, xpower - ypower - ceil(log2(other.limit)))
         limit = 2**abs(power)
         # v * 2^power = (x*2^xpower) / (y*2^ypower)
         #           v = (x * 2^(xpower - ypower - power)) / y

@@ -669,21 +669,12 @@ class Pixels(Encodable):
         """
         Divide the values of the two containers and clip the result to [0, 1].
 
-        The power P of A/B is min(0, A.power - B.power + ceil(log2(B.limit))),
+        The power P of A/B is min(0, A.power - B.power - ceil(log2(B.limit))),
         and the corresponding limit is 2**abs(P).
         """
         a, b = broadcast(self, other)
+        power = min(0, a.power - b.power - ceil(log2(b.limit)))
         result = a._truediv_(b)
-        power = min(0, a.power - b.power + ceil(log2(b.limit)))
-        assert result.shape == a.shape
-        assert result.power == power
-        assert result.limit == 2**abs(power)
-        return result
-
-    def __rtruediv__(self, other) -> Pixels:
-        b, a = broadcast(self, other)
-        result = a._truediv_(b)
-        power = min(0, a.power - b.power + b.limit.bit_length())
         assert result.shape == a.shape
         assert result.power == power
         assert result.limit == 2**abs(power)
@@ -1125,13 +1116,13 @@ def broadcast(a, b) -> tuple[Pixels, Pixels]:
         else:
             cls = encoding(type(a))
             pxa = encode_as(a, cls)
-            pxb = cls(b, power=pxa.power, limit=min(1, b))
+            pxb = cls(b, power=pxa.power, limit=b)
             return (pxa, pxb.broadcast_to(pxa.shape))
     else:
         if isinstance(b, Pixels):
             cls = encoding(type(b))
             pxb = encode_as(b, cls)
-            pxa = cls(a, power=pxb.power, limit=min(1, a))
+            pxa = cls(a, power=pxb.power, limit=a)
             return (pxa.broadcast_to(pxb.shape), pxb)
         else:
             raise TypeError("Cannot broadcast two scalars.")
