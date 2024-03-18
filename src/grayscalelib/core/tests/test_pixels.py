@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Iterable
 import pytest
 import itertools
 import math
@@ -255,16 +255,16 @@ def test_pow(pixels_subclass):
 two_arg_test = Callable[[float, float, float], bool]
 
 
-def two_arg_map_values(a: Pixels, b: Pixels, r: Pixels, fn: two_arg_test):
-    assert a.shape == b.shape == r.shape
-    da, sa = a.data, a.scale
-    db, sb = b.data, b.scale
-    dr, sr = r.data, r.scale
-    for index in product(*[range(s) for s in a.shape]):
-        va = da[*index] * sa
-        vb = db[*index] * sb
-        vr = dr[*index] * sr
-        assert fn(va, vb, vr)
+def pixel_values(*pixels: Pixels) -> Iterable[tuple[float, ...]]:
+    if len(pixels) == 0:
+        return
+    shape = pixels[0].shape
+    for px in pixels[1:]:
+        assert px.shape == shape
+    arrays = [px.data for px in pixels]
+    scales: list[float] = [px.scale for px in pixels]
+    for index in product(*[range(s) for s in shape]):
+        yield tuple(a[index] * s for a, s in zip(arrays, scales))
 
 
 def test_two_arg_fns(pixels_subclass):
@@ -277,44 +277,51 @@ def test_two_arg_fns(pixels_subclass):
             assert (pos == p).all()
         # __add__
         for a, b in product(ps, ps):
-            r = a + b
-            two_arg_map_values(a, b, r, lambda x, y, z: clip(x + y, 0, 1) == z)
+            for x, y, z in pixel_values(a, b, a + b):
+                assert clip(x + y, 0, 1) == z
         # __sub__
         for a, b in product(ps, ps):
-            r = a - b
-            two_arg_map_values(a, b, r, lambda x, y, z: clip(x - y, 0, 1) == z)
+            for x, y, z in pixel_values(a, b, a - b):
+                assert clip(x - y, 0, 1) == z
         # __mul__
         for a, b in product(ps, ps):
             r = a * b
-            two_arg_map_values(a, b, r, lambda x, y, z: clip(x * y, 0, 1) - z <= (r.scale / 2))
-        # __pow__
+            for x, y, z in pixel_values(a, b, r):
+                assert clip(x * y, 0, 1) - z <= (r.scale / 2)
         # __truediv__
+        for a, b in product(ps, ps):
+            r = a / b
+            for x, y, z in pixel_values(a, b, r):
+                if y == 0:
+                    assert z == 1
+                else:
+                    assert clip(x / y, 0, 1) - z <= (r.scale / 2)
         # __floordiv__
         # __mod__
         # __lt__
         for a, b in product(ps, ps):
-            r = a < b
-            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x < y else 0) == z)
+            for x, y, z in pixel_values(a, b, a < b):
+                assert z == 1 if x < y else z == 0
         # __gt__
         for a, b in product(ps, ps):
-            r = a > b
-            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x > y else 0) == z)
+            for x, y, z in pixel_values(a, b, a > b):
+                assert z == 1 if x > y else z == 0
         # __le__
         for a, b in product(ps, ps):
-            r = a <= b
-            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x <= y else 0) == z)
+            for x, y, z in pixel_values(a, b, a <= b):
+                assert z == 1 if x <= y else z == 0
         # __ge__
         for a, b in product(ps, ps):
-            r = a >= b
-            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x >= y else 0) == z)
+            for x, y, z in pixel_values(a, b, a >= b):
+                assert z == 1 if x >= y else z == 0
         # __eq__
         for a, b in product(ps, ps):
-            r = a == b
-            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x == y else 0) == z)
+            for x, y, z in pixel_values(a, b, a == b):
+                assert z == 1 if x == y else z == 0
         # __ne__
         for a, b in product(ps, ps):
-            r = a != b
-            two_arg_map_values(a, b, r, lambda x, y, z: (1 if x != y else 0) == z)
+            for x, y, z in pixel_values(a, b, a != b):
+                assert z == 1 if x != y else z == 0
 
 
 def test_rolling_sum(pixels_subclass):

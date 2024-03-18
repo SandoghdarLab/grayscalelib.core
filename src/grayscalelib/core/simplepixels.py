@@ -4,7 +4,7 @@ from typing import Callable, Literal, Self
 
 from itertools import product
 
-from math import prod
+from math import ceil, log2, prod
 
 import operator
 
@@ -196,7 +196,14 @@ class SimplePixels(Pixels):
         return self._map1(power, limit, fn)
 
     def _truediv_(self, other: Self) -> Self:
-        raise NotImplementedError()
+        xpower, ypower = self.power, other.power
+        power = min(0, xpower - ypower + ceil(log2(other.limit)))
+        limit = 2**abs(power)
+        # v * 2^power = (x*2^xpower) / (y*2^ypower)
+        #           v = (x * 2^(xpower - ypower - power)) / y
+        factor = 2**(xpower - ypower - power)
+        fn = lambda x, y: min(round((x * factor) / y), limit) if y > 0 else limit
+        return self._map2(other, power, limit, fn)
 
     def _floordiv_(self, other: Self) -> Self:
         raise NotImplementedError()

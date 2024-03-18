@@ -4,7 +4,7 @@ from abc import abstractmethod
 
 from contextlib import contextmanager
 
-from math import prod
+from math import ceil, log2, prod
 
 from types import EllipsisType
 
@@ -646,15 +646,14 @@ class Pixels(Encodable):
         """
         Raise each value to the specified power, and clip the result to [0, 1].
 
-        The result of X**Y has a power P = min(X.power, 0), and a limit of
-        min(2**abs(P), round((X.limit ** Y) * (Y * 2**(Y * X.power - P)))).
+        The result of A**B has a power P = min(A.power, 0), and a limit of
+        min(2**abs(power), round((A.limit ** B) * 2**(B * A.power - power)))
         """
-        cls = encoding(type(self))
-        X = encode_as(self, cls)
-        Y = float(exponent)
-        power = min(X.power, 0)
-        limit = min(2**abs(power), round((X.limit ** Y) * 2**(Y * X.power - power)))
-        result = X._pow_(Y)
+        a = encode_as(self, encoding(type(self)))
+        b = float(exponent)
+        power = min(a.power, 0)
+        limit = min(2**abs(power), round((a.limit ** b) * 2**(b * a.power - power)))
+        result = a._pow_(b)
         assert result.shape == self.shape
         assert result.power == power
         assert result.limit == limit
@@ -675,7 +674,7 @@ class Pixels(Encodable):
         """
         a, b = broadcast(self, other)
         result = a._truediv_(b)
-        power = min(0, a.power - b.power + b.limit.bit_length())
+        power = min(0, a.power - b.power + ceil(log2(b.limit)))
         assert result.shape == a.shape
         assert result.power == power
         assert result.limit == 2**abs(power)
