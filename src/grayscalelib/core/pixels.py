@@ -693,36 +693,25 @@ class Pixels(Encodable):
         The result has a power of zero and a limit of at most one.
         """
         a, b = broadcast(self, other)
-        result = a._floordiv_(b)
-        assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
-        return result
+        return (a / b) >= 1
 
     def __rfloordiv__(self, other) -> Pixels:
         b, a = broadcast(self, other)
-        result = a._floordiv_(b)
-        assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
-        return result
-
-    def _floordiv_(self: Self, other: Self) -> Self:
-        _ = other
-        raise MissingMethod(self, "dividing")
+        return (a / b) >= 1
 
     # mod
 
     def __mod__(self, other) -> Pixels:
         """
-        Left value modulo right value, clipped to [0, 1].
+        Left value modulo right value.
 
-        For any containers A and B, we have (A // B) + (A % B) == A.clip(0, 1).
+        The result's power P is min(a.power, b.power), and its limit is
+        min(a.limit * 2**(a.power - P), b.limit * 2**(b.power - P))
         """
         a, b = broadcast(self, other)
         result = a._mod_(b)
-        power = min(a.power, b.power, 0)
-        limit = 2**abs(power)
+        power = min(a.power, b.power)
+        limit = min(a.limit * 2**(a.power - power), b.limit * 2**(b.power - power))
         assert result.shape == a.shape
         assert result.power == power
         assert result.limit == limit
@@ -731,8 +720,8 @@ class Pixels(Encodable):
     def __rmod__(self, other) -> Pixels:
         b, a = broadcast(self, other)
         result = a._mod_(b)
-        power = min(a.power, b.power, 0)
-        limit = 2**abs(power)
+        power = min(a.power, b.power)
+        limit = min(a.limit * 2**(a.power - power), b.limit * 2**(b.power - power))
         assert result.shape == a.shape
         assert result.power == power
         assert result.limit == limit

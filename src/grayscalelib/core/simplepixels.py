@@ -205,11 +205,20 @@ class SimplePixels(Pixels):
         fn = lambda x, y: min(round((x * factor) / y), limit) if y > 0 else limit
         return self._map2(other, power, limit, fn)
 
-    def _floordiv_(self, other: Self) -> Self:
-        raise NotImplementedError()
-
     def _mod_(self, other: Self) -> Self:
-        raise NotImplementedError()
+        xpower, ypower = self.power, other.power
+        xlimit, ylimit = self.limit, other.limit
+        power = min(xpower, ypower)
+        limit = min(xlimit * 2**(xpower - power), ylimit * 2**(ypower - power))
+        if xpower == ypower:
+            fn = lambda x, y: x % y
+        elif xpower < ypower:
+            shift = ypower - xpower
+            fn = lambda x, y: x % (y << shift)
+        else: # ypower < xpower
+            shift = xpower - ypower
+            fn = lambda x, y: (x << shift) % y
+        return self._map2(other, power, limit, fn)
 
     def _cmp(self, other: Self, op: Callable[[int, int], Literal[0, 1]]) -> Self:
         xpower, ypower = self.power, other.power
