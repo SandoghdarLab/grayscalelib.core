@@ -12,7 +12,7 @@ from grayscalelib.core.protocols import ArrayLike, RealLike
 
 from grayscalelib.core.simplearray import SimpleArray
 
-from grayscalelib.core.pixels import Pixels, set_default_pixels_type
+from grayscalelib.core.pixels import Pixels, register_default_pixels_type
 
 class SimplePixels(Pixels):
     """A reference implementation of the Pixels protocol.
@@ -35,17 +35,18 @@ class SimplePixels(Pixels):
             limit: RealLike,
             power: int):
         shape = array.shape
-        scale = 1 / ((white - black) * (2**power))
-        vmax = round((limit - black) * scale)
+        scale: RealLike = 1 / ((white - black) * (2**power))
+        upper: RealLike = limit - black
+        new_limit = round((limit - black) * scale)
         values: list[int] = []
         for index in product(*tuple(range(n) for n in shape)):
-            clipped = max(0, min(array[index] - black, limit - black))
+            clipped = max(0, min(array[index] - black, upper))
             value = round(clipped * scale)
-            assert 0 <= value <= vmax
+            assert 0 <= value <= new_limit
             values.append(value)
         self._shape = shape
         self._power = power
-        self._limit = vmax
+        self._limit = new_limit
         self._array = SimpleArray(values, shape)
 
     # The abstract Pixels class has an encoding priority of zero.  By returning
@@ -211,13 +212,13 @@ class SimplePixels(Pixels):
         power = min(xpower, ypower)
         limit = min(xlimit * 2**(xpower - power), ylimit * 2**(ypower - power))
         if xpower == ypower:
-            fn = lambda x, y: x % y
+            fn = lambda x, y: x % y if y > 0 else 0
         elif xpower < ypower:
             shift = ypower - xpower
-            fn = lambda x, y: x % (y << shift)
+            fn = lambda x, y: x % (y << shift) if y > 0 else 0
         else: # ypower < xpower
             shift = xpower - ypower
-            fn = lambda x, y: (x << shift) % y
+            fn = lambda x, y: (x << shift) % y if y > 0 else 0
         return self._map2(other, power, limit, fn)
 
     def _cmp(self, other: Self, op: Callable[[int, int], Literal[0, 1]]) -> Self:
@@ -304,4 +305,4 @@ def strip_bits(i: int, n: int):
         raise ValueError("Negative number of stripped digits.")
 
 
-set_default_pixels_type(SimplePixels)
+register_default_pixels_type(SimplePixels)

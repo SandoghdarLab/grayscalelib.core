@@ -17,21 +17,26 @@ from grayscalelib.core.protocols import ArrayLike, RealLike
 from grayscalelib.core.simplearray import SimpleArray
 
 
-_mandatory_pixels_type: type[Pixels] | None = None
+_enforced_pixels_type: type[Pixels] | None = None
 
 _default_pixels_type: type[Pixels] | None = None
 
 _default_power: int = -12
 
 
-def set_default_pixels_type(cls: type[Pixels]):
+def register_default_pixels_type(cls: type[Pixels]):
     global _default_pixels_type
-    _default_pixels_type = cls
+    if _default_pixels_type is None:
+        _default_pixels_type = cls
+    elif _default_pixels_type.__encoding_priority__() < cls.__encoding_priority__():
+        _default_pixels_type = cls
+    else:
+        pass
 
 
 def encoding(cls, *clss) -> type[Pixels]:
-    if _mandatory_pixels_type:
-        return _mandatory_pixels_type
+    if _enforced_pixels_type:
+        return _enforced_pixels_type
     elif _default_pixels_type is None:
         return choose_encoding(cls, *clss)
     else:
@@ -44,13 +49,13 @@ def pixels_type(pt: type[Pixels], /):
     Create a context in which all operations on pixels will be carried out
     using the supplied representation.
     """
-    global _mandatory_pixels_type
-    previous = _mandatory_pixels_type
-    _mandatory_pixels_type = pt
+    global _enforced_pixels_type
+    previous = _enforced_pixels_type
+    _enforced_pixels_type = pt
     try:
         yield pt
     finally:
-        _mandatory_pixels_type = previous
+        _enforced_pixels_type = previous
 
 
 @contextmanager
@@ -109,8 +114,8 @@ class Pixels(Encodable):
             *,
             black: RealLike = 0,
             white: RealLike = 1,
-            limit: RealLike | None = None,
-            power: int | None = None):
+            power: int = _default_power,
+            limit: RealLike | None = None):
         """
         Initialize a Pixels container, based on the supplied arguments.
 
@@ -118,18 +123,18 @@ class Pixels(Encodable):
         ----------
         data: RealLike or Sequence or ArrayLike
             A real number, a nested sequence of real numbers, or an object that
-            has a shape and that returns real numbers when indexed.  Real numbers
-            are treated as arrays of rank zero.  Nested sequences of real numbers
-            must be structured such that all sequences of the same depth have the
-            same length, and they are treated as arrays whose shape consists
-            of these lengths.
+            has a shape and that returns real numbers when indexed. Real numbers
+            are treated as arrays of rank zero.  Nested sequences of real
+            numbers must be structured such that all sequences of the same depth
+            have the same length, and they are treated as arrays whose shape
+            consists of these lengths.
         black: real
             The number that is mapped to the intensity zero when converting data
             to pixels.  All data smaller than or equal to this number is treated
-            as pixels with intensity zero.
+            as pixels with intensity zero.  Its default value is zero.
         white: real
             The number that is mapped to the intensity one when converting data
-            to pixels.
+            to pixels.  Its default value is one.
         limit: real
             The number at which input data saturates.  Defaults to white, but can
             be set to a higher value to allow for pixel values larger than one.
@@ -140,8 +145,6 @@ class Pixels(Encodable):
             values can be represented with a precision of 0.5, and a power of -3
             means that values can be represented with a precision of 0.125.
         """
-        if power is None:
-            power = _default_power
         if limit is None:
             limit = white
         if not (black < white):
@@ -154,6 +157,7 @@ class Pixels(Encodable):
         assert self.shape == array.shape
         assert self.power == power
         assert self.limit == round((limit - black) / ((white - black) * (2**power)))
+
 
     @classmethod
     def from_data(cls, data: ArrayLike, power: int, limit: int):
@@ -684,21 +688,6 @@ class Pixels(Encodable):
         _ = other
         raise MissingMethod(self, "dividing")
 
-    # floordiv
-
-    def __floordiv__(self, other) -> Pixels:
-        """
-        Zero wherever the division is less than one, one otherwise.
-
-        The result has a power of zero and a limit of at most one.
-        """
-        a, b = broadcast(self, other)
-        return (a / b) >= 1
-
-    def __rfloordiv__(self, other) -> Pixels:
-        b, a = broadcast(self, other)
-        return (a / b) >= 1
-
     # mod
 
     def __mod__(self, other) -> Pixels:
@@ -730,6 +719,21 @@ class Pixels(Encodable):
     def _mod_(self: Self, other: Self) -> Self:
         _ = other
         raise MissingMethod(self, "computing the modulus of")
+
+    # floordiv
+
+    def __floordiv__(self, other) -> Pixels:
+        """
+        Zero wherever the division is less than one, one otherwise.
+
+        The result has a power of zero and a limit of at most one.
+        """
+        a, b = broadcast(self, other)
+        return (a / b) >= 1
+
+    def __rfloordiv__(self, other) -> Pixels:
+        b, a = broadcast(self, other)
+        return (a / b) >= 1
 
     # lt
 

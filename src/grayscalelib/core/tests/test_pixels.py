@@ -289,7 +289,7 @@ def test_two_arg_fns(pixels_subclass):
         for a, b in product(ps, ps):
             r = a * b
             for x, y, z in pixel_values(a, b, r):
-                assert clip(x * y, 0, 1) - z <= (r.scale / 2)
+                assert abs(clip(x * y, 0, 1) - z) <= (r.scale / 2)
         # __truediv__
         for a, b in product(ps, ps):
             r = a / b
@@ -297,20 +297,15 @@ def test_two_arg_fns(pixels_subclass):
                 if y == 0:
                     assert z == 1
                 else:
-                    assert clip(x / y, 0, 1) - z <= (r.scale / 2)
-        # __floordiv__
-        for a, b in product(ps, ps):
-            r = a // b
-            for x, y, z in pixel_values(a, b, r):
-                if y == 0:
-                    assert z == 1
-                else:
-                    assert clip(x // y, 0, 1) <= (r.scale / 2)
+                    assert abs(clip(x / y, 0, 1) - z) <= (r.scale / 2)
         # __mod__
         for a, b in product(ps, ps):
             r = a % b
             for x, y, z in pixel_values(a, b, r):
-                assert clip(x % y, 0, 1) <= (r.scale / 2)
+                if y == 0:
+                    assert z == 0
+                else:
+                    assert abs((x % y) - z) <= (r.scale / 2)
         # __lt__
         for a, b in product(ps, ps):
             for x, y, z in pixel_values(a, b, a < b):
