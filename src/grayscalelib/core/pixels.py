@@ -4,27 +4,45 @@ from abc import abstractmethod
 
 from contextlib import contextmanager
 
-from math import ceil, log2, prod
+from dataclasses import dataclass
+
+from math import ceil, prod
+
+from os import PathLike
+
+from pathlib import Path
 
 from types import EllipsisType
 
-from typing import Callable, Iterable, Self, Sequence, TypeVar
+from typing import Generic, Protocol, Self, TypeVar, runtime_checkable
 
-from encodable import choose_encoding, encode_as, Encodable
+import numpy as np
 
-from grayscalelib.core.protocols import ArrayLike, RealLike
+import numpy.typing as npt
 
-from grayscalelib.core.simplearray import SimpleArray
+from grayscalelib.core.discretization import Discretization
+
+from grayscalelib.core.encodable import choose_encoding, Encodable
+
+
+###############################################################################
+###
+### Global Variables
 
 
 _enforced_pixels_type: type[Pixels] | None = None
 
 _default_pixels_type: type[Pixels] | None = None
 
-_default_power: int = -12
+_default_states: int = 256
+
+boolean_discretization = Discretization((0.0, 1.0), (0, 1))
+
+uint = np.uint8 | np.uint16 | np.uint32 | np.uint64
 
 
 def register_default_pixels_type(cls: type[Pixels]):
+    """Consider the supplied pixels class as a default implementation."""
     global _default_pixels_type
     if _default_pixels_type is None:
         _default_pixels_type = cls
@@ -34,13 +52,15 @@ def register_default_pixels_type(cls: type[Pixels]):
         pass
 
 
-def encoding(cls, *clss) -> type[Pixels]:
+def encoding(*clss: type[Pixels]) -> type[Pixels]:
+    """Determine the canonical encoding of the supplied pixels classes."""
     if _enforced_pixels_type:
         return _enforced_pixels_type
-    elif _default_pixels_type is None:
-        return choose_encoding(cls, *clss)
-    else:
-        return choose_encoding(cls, *clss, _default_pixels_type)
+    if _default_pixels_type is not None:
+        clss += (_default_pixels_type,)
+    if len(clss) == 0:
+        raise RuntimeError("Not a single registered default Pixels type.")
+    return choose_encoding(*clss)
 
 
 @contextmanager
@@ -74,19 +94,49 @@ def default_pixels_type(pt: type[Pixels], /):
 
 
 @contextmanager
-def default_power(power: int):
+def default_pixels_states(states: int):
     """
-    Create a context in which the supplied power is the default when
-    constructing pixels.
-    """
-    global _default_power
-    previous = _default_power
-    _default_power = power
-    try:
-        yield power
-    finally:
-        _default_power = previous
+    Create a context in which the supplied number of states is the default
+    when constructing pixels.
 
+    """
+    global _default_states
+    previous = _default_states
+    _default_states = states
+    try:
+        yield states
+    finally:
+        _default_states = previous
+
+
+###############################################################################
+###
+### The Pixels Class
+
+
+@runtime_checkable
+class Real(Protocol):
+    def __float__(self) -> float:
+        ...
+
+
+T = TypeVar('T')
+
+
+@dataclass(frozen=True)
+class Initializer(Generic[T]):
+    """An object that describes the initialization of an instance.
+
+    Initializer objects can be supplied as sole argument to a suitable __init__
+    method to replace the usual processing of arguments with something else
+    entirely.
+    """
+
+    def initialize(self, /, instance: T) -> None:
+        raise MissingMethod(
+            self,
+            f"initialize an instance of type {type(instance)} with a"
+        )
 
 class Pixels(Encodable):
     """A container for non-negative values with uniform spacing.
@@ -94,89 +144,71 @@ class Pixels(Encodable):
     This class describes an abstract protocol for working with grayscale data.
     It supports working with individual values, vectors of values, images of
     values, videos of values, and stacks thereof.  Each pixel value is encoded
-    in the form datum*(2**power), where datum is an integer that may be
-    different for each pixel, and power is an integer that is the same for all
-    pixels.
+    as a discrete number of equidistant points.
     """
-    def __new__(cls, data, **kwargs):
+
+    def __new__(
+            cls,
+            data: npt.ArrayLike | Initializer[T],
+            **kwargs) -> Pixels:
         # If someone attempts to instantiate the abstract pixels base class,
         # instantiate an appropriate subclass instead.
         if cls is Pixels:
             newcls = encoding(cls)
-            assert newcls != cls
-            return encoding(newcls).__new__(newcls, data, **kwargs)
-        else:
-            return super().__new__(cls)
+            assert newcls != cls # Avoid infinite recursion
+            return newcls.__new__(newcls, data, **kwargs)
+        # Otherwise, use the default __new__ method.
+        return super().__new__(cls)
 
     def __init__(
             self,
-            data: RealLike | Sequence | ArrayLike,
+            data: npt.ArrayLike | Initializer[Self],
             *,
-            black: RealLike = 0,
-            white: RealLike = 1,
-            power: int = _default_power,
-            limit: RealLike | None = None):
+            black: Real = 0,
+            white: Real = 1,
+            states: int = _default_states,
+    ):
         """
         Initialize a Pixels container, based on the supplied arguments.
 
         Parameters
         ----------
-        data: RealLike or Sequence or ArrayLike
-            A real number, a nested sequence of real numbers, or an object that
-            has a shape and that returns real numbers when indexed. Real numbers
-            are treated as arrays of rank zero.  Nested sequences of real
-            numbers must be structured such that all sequences of the same depth
-            have the same length, and they are treated as arrays whose shape
-            consists of these lengths.
+        data: ArrayLike
+            A real number, a nested sequence of real numbers, or an array of
+            real numbers.
         black: real
-            The number that is mapped to the intensity zero when converting data
-            to pixels.  All data smaller than or equal to this number is treated
-            as pixels with intensity zero.  Its default value is zero.
+            The number that is mapped to the intensity zero when viewing the data
+            as a grayscale image.  Its default value is zero.
         white: real
-            The number that is mapped to the intensity one when converting data
-            to pixels.  Its default value is one.
-        limit: real
-            The number at which input data saturates.  Defaults to white, but can
-            be set to a higher value to allow for pixel values larger than one.
-        power: int, optional
-            The exponent in the datum*(2**power) encoding of each pixel value.
-            Most pixel operations clip their result to the [0, 1] interval, so
-            power values are usually be negative.  A power of -1 means pixel
-            values can be represented with a precision of 0.5, and a power of -3
-            means that values can be represented with a precision of 0.125.
+            The number that is mapped to the intensity one when viewing the data
+            as a grayscale image.  Its default value is one.
+        states: int, optional
+            The number of discrete states that the [floor, ceiling] interval is
+             partitioned into.
         """
-        if limit is None:
-            limit = white
-        if not (black < white):
-            raise ValueError("Black must be less than white.")
-        if not (black <= limit):
-            raise ValueError("Black must be less than or equal to limit.")
-        array = coerce_to_array(data)
-        self._init_(array, black, white, limit, power)
-        # Ensure the container was initialized correctly.
-        assert self.shape == array.shape
-        assert self.power == power
-        assert self.limit == round((limit - black) / ((white - black) * (2**power)))
-
+        super().__init__()
+        if isinstance(data, Initializer):
+            initializer = data
+        else:
+            discretization = Discretization((float(black), float(white)), (0, max(states, 1)-1))
+            initializer = self._initializer_(data, discretization)
+        initializer.initialize(self)
 
     @classmethod
-    def from_data(cls, data: ArrayLike, power: int, limit: int):
-        return cls(data, white=2**(-power), power=power, limit=limit)
+    def _initializer_(
+            cls: type[T],
+            data: npt.ArrayLike,
+            discretization: Discretization,
+    ) -> Initializer[T]:
+        """Create a suitable pixels initializer.
 
-    @abstractmethod
-    def _init_(
-            self,
-            array: ArrayLike,
-            black: RealLike,
-            white: RealLike,
-            limit: RealLike,
-            power: int):
+        Invoked in pixels' __init__ method to create an initializer object,
+        which is then invoked to perform the actual initialization.  This
+        double dispatch allows customization both across pixels classes (first
+        invocation), and across data representations (second invocation).
         """
-        Initialize the supplied pixels based on the supplied parameters.  This
-        method is called by __init__ after ensuring that all supplied arguments
-        are well formed.
-        """
-        raise MissingMethod(self, "creating")
+        _, _ = data, discretization
+        raise MissingClassmethod(cls, "creating")
 
     @property
     @abstractmethod
@@ -188,57 +220,58 @@ class Pixels(Encodable):
 
     @property
     @abstractmethod
-    def power(self) -> int:
+    def discretization(self) -> Discretization:
         """
-        The power of two that is multiplied with each internal datum to produce
-        a pixel's value.
+        The discretization between the [black, white] interval of pixel values to
+        discrete integers.
         """
         ...
 
     @property
-    def scale(self) -> float:
+    def states(self) -> int:
         """
-        The minimum possible interval between any two differing pixel values.
+        The number of discrete states of each Pixel.
         """
-        return 2.0 ** self.power
+        return self.discretization.states
+
+    @property
+    def eps(self) -> float:
+        """
+        The distance between any two adjacent Pixel states.
+        """
+        return self.discretization.eps
 
     @property
     @abstractmethod
-    def data(self) -> ArrayLike:
+    def data(self) -> npt.NDArray[np.float64]:
         """
-        A read-only array of integers of the same shape as the pixels, that
-        contains the pixel values before they have been multiplied with
-        2**power.
+        A read-only array of floats in [self.black, self.white] with the
+        same shape as the pixels.
         """
         ...
-
-    @property
-    def black(self) -> int:
-        """
-        The smallest integer that may appear in any pixel datum.
-        """
-        return 0
-
-    @property
-    def white(self) -> int:
-        """
-        The pixel datum that corresponds to a value of one.
-
-        Raises an error if the power of the container is positive, because such
-        an encoding cannot describe a value of one precisely anymore.
-        """
-        if self.power <= 0:
-            return 2**(-self.power)
-        else:
-            raise RuntimeError("Pixels with positive power have no exact white.")
 
     @property
     @abstractmethod
-    def limit(self) -> int:
+    def raw(self) -> npt.NDArray[uint]:
         """
-        The largest integer that may appear in any pixel datum.
+        A read-only array of integers in [0, self.states-1] with the same
+        shape as the pixels.
         """
         ...
+
+    @property
+    def black(self) -> float:
+        """
+        The smallest value that a pixel can hold.
+        """
+        return self.discretization.domain.lo
+
+    @property
+    def white(self) -> float:
+        """
+        The largest value that a pixel can hold.
+        """
+        return self.discretization.domain.hi
 
     @property
     def rank(self) -> int:
@@ -246,6 +279,9 @@ class Pixels(Encodable):
         The number of axes of this container.
         """
         return len(self.shape)
+
+    def __array__(self) -> npt.NDArray[np.float64]:
+        return self.data
 
     def __len__(self: Pixels) -> int:
         """
@@ -260,12 +296,61 @@ class Pixels(Encodable):
         A textual representation of this container.
         """
         name = type(self).__name__
-        data = coerce_to_nested_sequence(self.data)
-        return f"{name}({data}, shape={self.shape}, power={self.power}, limit={self.limit})"
+        return f"{name}({self.data}, shape={self.shape}, discretization={self.discretization})"
 
-    @abstractmethod
-    def to_array(self) -> ArrayLike:
-        raise MissingMethod(self, "reifying")
+    # Conversion from something to pixels.
+
+    @classmethod
+    def from_raw_file(
+            cls,
+            path: str | PathLike[str],
+            shape: tuple[int, ...] | int,
+            *,
+            dtype: npt.DTypeLike | None = None,
+            black: Real = 0,
+            white: Real  = 1,
+            states: int = _default_states) -> Pixels:
+        # Ensure the path exists.
+        path = canonicalize_path(path)
+        if not path.exists():
+            raise RuntimeError(f"The file {path} doesn't exist.")
+        # Ensure the supplied shape is valid.
+        shape = canonicalize_shape(shape)
+        # Determine the raw file's element type.
+        if dtype is None:
+            size = prod(shape)
+            fbytes = path.stat().st_size
+            itemsize, mod = divmod(fbytes, size)
+            if mod != 0:
+                raise RuntimeError(
+                    f"Raw file size {fbytes} is not divisible by the number of elements {size}."
+                )
+            dtype = f"u{itemsize}"
+        dtype = np.dtype(dtype)
+        black_default, white_default, states_default = dtype_black_white_states(dtype)
+        discretization = Discretization((float(black), float(white)), (0, states-1))
+        initializer = RawFilePixelsInitializer(
+            path=path,
+            temp=False,
+            shape=shape,
+            discretization=discretization,
+            dtype=dtype
+        )
+        return RawFilePixels(initializer).encode_as(cls)
+
+    # Conversion from pixels to something else.
+
+    def to_raw_file(
+            self,
+            path: str | PathLike[str] | None = None,
+            *,
+            overwrite=True,
+            temp: bool = False,
+    ) -> RawFilePixels:
+        raw_file = self.encode_as(RawFilePixels)
+        if path is not None:
+            raw_file.rename(path, overwrite=overwrite)
+        return raw_file
 
     # getitem
 
@@ -301,9 +386,11 @@ class Pixels(Encodable):
                 raise ValueError(f"Invalid entry {p} for permutation of length {nperm}.")
             if p in permutation[:i]:
                 raise ValueError(f"Duplicate entry {p} in permutation {permutation}.")
-        cls = encoding(type(self))
+        if nperm < rank:
+            permutation += tuple(range(nperm, rank))
         # Call the actual implementation.
-        result = encode_as(self, cls)._permute_(permutation)
+        cls = encoding(type(self))
+        result = self.encode_as(cls)._permute_(permutation)
         # Ensure that the result has the expected shape.
         old_shape = self.shape
         new_shape = result.shape
@@ -318,6 +405,28 @@ class Pixels(Encodable):
         _ = permutation
         raise MissingMethod(self, "permuting")
 
+    # align_with
+
+    def align_with(
+            self,
+            *,
+            black: Real | None = None,
+            white: Real | None = None,
+            states: int | None = None) -> Pixels:
+        """Change the internal encoding of some Pixels to be aligned with the
+        supplied discretization"""
+        _black = self.black if black is None else float(black)
+        _white = self.white if white is None else float(white)
+        _states = self.states if states is None else states
+        result = self._align_with_(_black, _white, _states)
+        assert result.shape == self.shape
+        assert result.states <= _states
+        return result
+
+    def _align_with_(self, black: float, white: float, states: int) -> Pixels:
+        _, _, _ = black, white, states
+        raise MissingMethod(self, "rescaling")
+
     # reshape
 
     def reshape(self, shape: tuple[int, ...]) -> Pixels:
@@ -327,10 +436,10 @@ class Pixels(Encodable):
         if prod(shape) != prod(self.shape):
             raise ValueError(f"Cannot reshape from shape {self.shape} to shape {shape}.")
         cls = encoding(type(self))
-        result = encode_as(self, cls)._reshape_(shape)
+        result = self.encode_as(cls)._reshape_(shape)
         assert result.shape == shape
-        assert result.power == self.power
-        assert result.limit == self.limit
+        assert result.discretization == self.discretization
+        assert result.states == self.states
         return result
 
     def _reshape_(self, shape: tuple[int, ...]) -> Self:
@@ -343,10 +452,11 @@ class Pixels(Encodable):
         """
         Replicate and stack the supplied data until it has the specified shape.
         """
+        shape = canonicalize_shape(shape)
         result = self._broadcast_to_(shape)
         assert result.shape == shape
-        assert result.power == self.power
-        assert result.limit == self.limit
+        assert result.discretization == self.discretization
+        assert result.states == self.states
         return result
 
     def _broadcast_to_(self, shape: tuple[int, ...]) -> Pixels:
@@ -360,27 +470,27 @@ class Pixels(Encodable):
 
     def any(self) -> bool:
         """
-        Whether at least one pixel in the container has a non-zero value.
+        Whether at least one pixel in the container has a non-black value.
         """
         cls = encoding(type(self))
-        result = encode_as(self, cls)._any_()
+        result = self.encode_as(cls)._any_()
         assert result is True or result is False
         return result
 
     def _any_(self) -> bool:
-        raise MissingMethod(self, "testing for any-non-zero")
+        raise MissingMethod(self, "testing for any non-black")
 
     def all(self) -> bool:
         """
-        Whether all pixels in the container have a non-zero value.
+        Whether all pixels in the container have a non-black value.
         """
         cls = encoding(type(self))
-        result = encode_as(self, cls)._all_()
+        result = self.encode_as(cls)._all_()
         assert result is True or result is False
         return result
 
     def _all_(self) -> bool:
-        raise MissingMethod(self, "testing for all-non-zero")
+        raise MissingMethod(self, "testing for all non-black")
 
 
     # and
@@ -389,16 +499,17 @@ class Pixels(Encodable):
         """
         The logical conjunction of the two supplied containers.
 
-        The resulting container has a power of zero and a limit of zero or one.
+        The resulting container has two states: zero and one
         """
         a, b = broadcast(self, other)
         result = a._and_(b)
         assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
+        assert result.discretization == boolean_discretization
         return result
 
-    __rand__ = __and__  # and is symmetric
+    def __rand__(self, other) -> Pixels:
+        b, a = pixelize(self, other)
+        return a.__and__(b)
 
     def _and_(self: Self, other: Self) -> Self:
         _ = other
@@ -410,16 +521,17 @@ class Pixels(Encodable):
         """
         The logical disjunction of the two supplied containers.
 
-        The resulting container has a power of zero and a limit of zero or one.
+        The resulting container has two states: zero and one
         """
         a, b = broadcast(self, other)
         result = a._or_(b)
         assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
+        assert result.discretization == boolean_discretization
         return result
 
-    __ror__ = __or__ # or is symmetric
+    def __ror__(self, other) -> Pixels:
+        b, a = pixelize(self, other)
+        return a.__or__(b)
 
     def _or_(self: Self, other: Self) -> Self:
         _ = other
@@ -431,16 +543,17 @@ class Pixels(Encodable):
         """
         The exclusive disjunction of the two supplied containers.
 
-        The resulting container has a power of zero and a limit of zero or one.
+        The resulting container has two states: zero and one
         """
         a, b = broadcast(self, other)
         result = a._xor_(b)
         assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
+        assert result.discretization == boolean_discretization
         return result
 
-    __rxor__ = __or__ # xor is symmetric
+    def __rxor__(self, other) -> Pixels:
+        b, a = pixelize(self, other)
+        return a.__xor__(b)
 
     def _xor_(self: Self, other: Self) -> Self:
         _ = other
@@ -451,83 +564,51 @@ class Pixels(Encodable):
     def __lshift__(self, amount: int) -> Pixels:
         """
         Multiply each value by two to the power of the supplied amount.
-
-        The power of the result is the power of the supplied container plus the
-        supplied amount.
         """
-        # Ensure the amount is non-negative.
-        if amount < 0:
-            return self >> -amount
-        cls = encoding(type(self))
-        pix = encode_as(self, cls)
-        # Handle the trivial case where the amount is zero.
-        if amount == 0:
-            return pix
-        result = pix._lshift_(amount)
-        assert result.shape == self.shape
-        assert result.power == self.power + amount
-        assert result.limit == self.limit
-        return result
-
-    def _lshift_(self: Self, amount: int) -> Self:
-        _ = amount
-        raise MissingMethod(self, "increasing the scale of")
+        if amount >= 0:
+            return self * 2**amount
+        else:
+            return self >> (-amount)
 
     # rshift
 
     def __rshift__(self, amount: int) -> Pixels:
         """
         Divide each value by two to the power of the supplied amount.
-
-        The power of the result is the power of the supplied container minus
-        the supplied amount.
         """
-        # Ensure the amount is non-negative.
-        if amount < 0:
-            return self << -amount
-        cls = encoding(type(self))
-        pix = encode_as(self, cls)
-        if amount == 0:
-            return pix
-        result = pix._rshift_(amount)
-        assert result.shape == self.shape
-        assert result.power == self.power - amount
-        assert result.limit == self.limit
-        return result
-
-    def _rshift_(self: Self, amount: int) -> Self:
-        _ = amount
-        raise MissingMethod(self, "decreasing the scale of")
+        if amount >= 0:
+            return self / 2**amount
+        else:
+            return self << (-amount)
 
     # abs
 
     def __abs__(self) -> Pixels:
         """
-        Do nothing, since pixels are non-negative by definition.
+        Negate each pixel value less than zero.
         """
         cls = encoding(type(self))
-        result = encode_as(self, cls)
+        result = self.encode_as(cls)._abs_()
         assert result.shape == self.shape
-        assert result.power == self.power
-        assert result.limit == self.limit
+        sdomain = self.discretization.domain
+        rdomain = result.discretization.domain
+        assert rdomain.lo == max(0.0, sdomain.lo)
+        assert rdomain.hi == max(abs(sdomain.lo), abs(sdomain.hi))
         return result
+
+    def _abs_(self) -> Self:
+        raise MissingMethod(self, "computing the absolute of")
 
     # invert
 
     def __invert__(self) -> Pixels:
         """
-        One minus the original value, clipped to [0, 1]
-
-        The resulting container has the same power of P = min(power, 0), and a
-        limit of 2**abs(P).
+        Flip the sign of each pixel.
         """
         cls = encoding(type(self))
-        result = encode_as(self, cls)._invert_()
-        power = min(self.power, 0)
-        limit = 2**abs(power)
+        result = self.encode_as(cls)._invert_()
         assert result.shape == self.shape
-        assert result.power == power
-        assert result.limit == limit
+        assert result.states == self.states
         return result
 
     def _invert_(self) -> Self:
@@ -535,52 +616,35 @@ class Pixels(Encodable):
 
     # neg
 
-    def __neg__(self) -> Pixels:
-        """
-        Return zeros of the same shape.
-
-        This is a weird operator for pixels.  The convention is that the result
-        of each pixel math operation is clipped to the [0, 1] interval.  For
-        negation, this means that the resulting array is all zero.
-        """
-        return type(self)(0, power=self.power, limit=0).broadcast_to(self.shape)
+    __neg__ = __invert__
 
     # pos
 
     def __pos__(self) -> Pixels:
         """
-        Do nothing, since pixels are non-negative by definition.
+        Do nothing.
         """
         cls = encoding(type(self))
-        result = encode_as(self, cls)
+        result = self.encode_as(cls)
         assert result.shape == self.shape
-        assert result.limit == self.limit
-        assert result.power == self.power
+        assert result.discretization == self.discretization
+        assert result.states == self.states
         return result
 
     # add
 
     def __add__(self, other):
         """
-        Add the values of the two containers and clip the result to [0, 1].
-
-        The result of the addition of two containers A and B has a power of P =
-        min(A.power, B.power, 0), and a limit that is the minimum of
-        round(A.limit * 2**(P - A.power) + B.limit * 2**(P - B.power)) and
-        2**abs(P).
+        Add the values of the two containers.
         """
         a, b = broadcast(self, other)
         result = a._add_(b)
-        power = min(a.power, b.power, 0)
-        limit = min(round(a.limit * 2**(power - a.power) +
-                          b.limit * 2**(power - b.power)),
-                    2**abs(power))
         assert result.shape == a.shape
-        assert result.power == power
-        assert result.limit == limit
         return result
 
-    __radd__ = __add__# add is symmetric
+    def __radd__(self, other):
+        b, a = pixelize(self, other)
+        return a.__add__(b)
 
     def _add_(self: Self, other: Self) -> Self:
         _ = other
@@ -590,31 +654,15 @@ class Pixels(Encodable):
 
     def __sub__(self, other):
         """
-        Subtract the values of the two containers and clip the result to the
-        interval [0, 1].
-
-        The result of the subtraction of two containers A and B has a power of
-        P = min(A.power, B.power, 0), and a limit that is the minimum of
-        round(A.limit * 2**(P - a.power)) and 2**abs(P).
+        Subtract the values of the two containers.
         """
         a, b = broadcast(self, other)
         result = a._sub_(b)
-        power = min(a.power, b.power, 0)
-        limit = min(round(a.limit * 2**(a.power - power)), 2**abs(power))
-        assert result.shape == a.shape
-        assert result.power == power
-        assert result.limit == limit
-        return result
+        pass # TODO
 
     def __rsub__(self, other):
-        b, a = broadcast(self, other)
-        result = a._sub_(b)
-        power = min(a.power, b.power)
-        limit = a.limit * 2**(power - a.power)
-        assert result.shape == a.shape
-        assert result.power == power
-        assert result.limit == limit
-        return result
+        b, a = pixelize(self, other)
+        return a.__sub__(b)
 
     def _sub_(self: Self, other: Self) -> Self:
         _ = other
@@ -624,21 +672,15 @@ class Pixels(Encodable):
 
     def __mul__(self, other) -> Pixels:
         """
-        Multiply the values of the containers and clip the result to [0, 1].
-
-        The result of the multiplication of some containers A and B has the
-        power of P = min(A.power, B.power, 0), and a limit of 2**abs(P)
+        Multiply the values of the containers.
         """
         a, b = broadcast(self, other)
         result = a._mul_(b)
-        power = min(a.power, b.power, 0)
-        limit = 2**abs(power)
-        assert result.shape == a.shape
-        assert result.power == power
-        assert result.limit == limit
-        return result
+        return result # TODO
 
-    __rmul__ = __mul__ # mul is symmetric
+    def __rmul__(self, other):
+        b, a = pixelize(self, other)
+        return a.__mul__(b)
 
     def _mul_(self: Self, other: Self) -> Self:
         _ = other
@@ -646,24 +688,15 @@ class Pixels(Encodable):
 
     # pow
 
-    def __pow__(self, exponent: RealLike) -> Pixels:
+    def __pow__(self, exponent) -> Pixels:
         """
-        Raise each value to the specified power, and clip the result to [0, 1].
-
-        The result of A**B has a power P = min(A.power, 0), and a limit of
-        min(2**abs(power), round((A.limit ** B) * 2**(B * A.power - power)))
+        Raise each value to the specified power.
         """
-        a = encode_as(self, encoding(type(self)))
-        b = float(exponent)
-        power = min(a.power, 0)
-        limit = min(2**abs(power), round((a.limit ** b) * 2**(b * a.power - power)))
+        a, b = broadcast(self, exponent)
         result = a._pow_(b)
-        assert result.shape == self.shape
-        assert result.power == power
-        assert result.limit == limit
-        return result
+        return result # TODO
 
-    def _pow_(self: Self, other: float) -> Self:
+    def _pow_(self: Self, other: Self) -> Self:
         _ = other
         raise MissingMethod(self, "exponentiating")
 
@@ -671,18 +704,11 @@ class Pixels(Encodable):
 
     def __truediv__(self, other) -> Pixels:
         """
-        Divide the values of the two containers and clip the result to [0, 1].
-
-        The power P of A/B is min(0, A.power - B.power - ceil(log2(B.limit))),
-        and the corresponding limit is 2**abs(P).
+        Divide the values of the two containers.
         """
         a, b = broadcast(self, other)
-        power = min(0, a.power - b.power - ceil(log2(b.limit)))
         result = a._truediv_(b)
-        assert result.shape == a.shape
-        assert result.power == power
-        assert result.limit == 2**abs(power)
-        return result
+        return result # TODO
 
     def _truediv_(self: Self, other: Self) -> Self:
         _ = other
@@ -693,28 +719,14 @@ class Pixels(Encodable):
     def __mod__(self, other) -> Pixels:
         """
         Left value modulo right value.
-
-        The result's power P is min(a.power, b.power), and its limit is
-        min(a.limit * 2**(a.power - P), b.limit * 2**(b.power - P))
         """
         a, b = broadcast(self, other)
         result = a._mod_(b)
-        power = min(a.power, b.power)
-        limit = min(a.limit * 2**(a.power - power), b.limit * 2**(b.power - power))
-        assert result.shape == a.shape
-        assert result.power == power
-        assert result.limit == limit
-        return result
+        return result # TODO
 
     def __rmod__(self, other) -> Pixels:
-        b, a = broadcast(self, other)
-        result = a._mod_(b)
-        power = min(a.power, b.power)
-        limit = min(a.limit * 2**(a.power - power), b.limit * 2**(b.power - power))
-        assert result.shape == a.shape
-        assert result.power == power
-        assert result.limit == limit
-        return result
+        b, a = pixelize(self, other)
+        return a.__mod__(b)
 
     def _mod_(self: Self, other: Self) -> Self:
         _ = other
@@ -724,30 +736,30 @@ class Pixels(Encodable):
 
     def __floordiv__(self, other) -> Pixels:
         """
-        Zero wherever the division is less than one, one otherwise.
-
-        The result has a power of zero and a limit of at most one.
+        Divide the values of the two containers and round the result down to the next integer.
         """
         a, b = broadcast(self, other)
-        return (a / b) >= 1
+        result = a._floordiv_(b)
+        return result # TODO
 
     def __rfloordiv__(self, other) -> Pixels:
-        b, a = broadcast(self, other)
-        return (a / b) >= 1
+        b, a = pixelize(self, other)
+        return a.__floordiv__(b)
+
+    def _floordiv_(self: Self, other: Self) -> Self:
+        _ = other
+        raise MissingMethod(self, "floor-dividing")
 
     # lt
 
     def __lt__(self, other) -> Pixels:
         """
         One wherever the left value is smaller than the right, zero otherwise.
-
-        The resulting container has one integer bit, and zero fractional bits.
         """
         a, b = broadcast(self, other)
         result = a._lt_(b)
         assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
+        assert result.discretization == boolean_discretization
         return result
 
     def _lt_(self: Self, other: Self) -> Self:
@@ -759,14 +771,11 @@ class Pixels(Encodable):
     def __gt__(self, other) -> Pixels:
         """
         One wherever the left value is greater than the right, zero otherwise.
-
-        The resulting container has one integer bit, and zero fractional bits.
         """
         a, b = broadcast(self, other)
         result = a._gt_(b)
         assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
+        assert result.discretization == boolean_discretization
         return result
 
     def _gt_(self: Self, other: Self) -> Self:
@@ -778,14 +787,11 @@ class Pixels(Encodable):
         """
         One wherever the left value is less than or equal to the right, zero
         otherwise.
-
-        The resulting container has one integer bit, and zero fractional bits.
         """
         a, b = broadcast(self, other)
         result = a._le_(b)
         assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
+        assert result.discretization == boolean_discretization
         return result
 
     def _le_(self: Self, other: Self) -> Self:
@@ -798,14 +804,11 @@ class Pixels(Encodable):
         """
         One wherever the left value is greater than or equal to the right, zero
         otherwise.
-
-        The resulting container has one integer bit, and zero fractional bits.
         """
         a, b = broadcast(self, other)
         result = a._ge_(b)
         assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
+        assert result.discretization == boolean_discretization
         return result
 
     def _ge_(self: Self, other: Self) -> Self:
@@ -816,14 +819,11 @@ class Pixels(Encodable):
     def __eq__(self, other) -> Pixels: # type: ignore
         """
         One wherever the left value is equal to the right, zero otherwise.
-
-        The resulting container has one integer bit, and zero fractional bits.
         """
         a, b = broadcast(self, other)
         result = a._eq_(b)
         assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
+        assert result.discretization == boolean_discretization
         return result
 
     def _eq_(self: Self, other: Self) -> Self:
@@ -835,14 +835,11 @@ class Pixels(Encodable):
     def __ne__(self, other) -> Pixels: # type: ignore
         """
         One wherever the left value is different than the right, zero otherwise.
-
-        The resulting container has one integer bit, and zero fractional bits.
         """
         a, b = broadcast(self, other)
         result = a._ne_(b)
         assert result.shape == a.shape
-        assert result.power == 0
-        assert result.limit <= 1
+        assert result.discretization == boolean_discretization
         return result
 
     def _ne_(self: Self, other: Self) -> Self:
@@ -871,10 +868,8 @@ class Pixels(Encodable):
         """
         window_sizes = canonicalize_window_sizes(window_size, self.shape)
         cls = encoding(type(self))
-        result = encode_as(self, cls)._rolling_sum_(window_sizes)
+        result = self.encode_as(cls)._rolling_sum_(window_sizes)
         assert result.shape == tuple((s - w + 1) for s, w in zip(self.shape, window_sizes))
-        assert result.limit == prod(window_sizes) * self.limit
-        assert result.power == self.power
         return result
 
     def _rolling_sum_(self, window_sizes: tuple[int, ...]) -> Self:
@@ -924,10 +919,8 @@ class Pixels(Encodable):
     def rolling_median(self, window_size: int | tuple[int, ...]) -> Pixels:
         window_sizes = canonicalize_window_sizes(window_size, self.shape)
         cls = encoding(type(self))
-        result = encode_as(self, cls)._rolling_median_(window_sizes)
+        result = self.encode_as(cls)._rolling_median_(window_sizes)
         assert result.shape == tuple((s - w + 1) for s, w in zip(self.shape, window_sizes))
-        assert result.limit == self.limit
-        assert result.power == self.power
         return result
 
     def _rolling_median_(self, window_sizes: tuple[int, ...]) -> Self:
@@ -937,74 +930,155 @@ class Pixels(Encodable):
     # TODO new methods: variance, convolve, fft
 
 
+P = TypeVar('P', bound=Pixels)
+
+
+@dataclass(frozen=True)
+class PixelsInitializer(Initializer[P]):
+    pass
+
+
+###############################################################################
+###
+### Concrete Pixels
+
+class ConcretePixels(Pixels):
+    _shape: tuple[int, ...]
+    _discretization: Discretization
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self._shape
+
+    @property
+    def discretization(self) -> Discretization:
+        return self._discretization
+
+
+CP = TypeVar('CP', bound=ConcretePixels)
+
+
+@dataclass(frozen=True)
+class ConcretePixelsInitializer(PixelsInitializer[CP]):
+    shape: tuple[int, ...]
+    discretization: Discretization
+
+    def initialize(self, /, instance: CP):
+        instance._shape = self.shape
+        instance._discretization = self.discretization
+
+
+###############################################################################
+###
+### File Pixels
+
+class FilePixels(ConcretePixels):
+    """Pixels stored in a file.
+
+    The Pixels that are stored in a file don't reside in main memory, but
+    somewhere in the file system.  The file can either be temporary, in which
+    case it is removed once its corresponding class is no longer reachable, or
+    it can be persistent.  A persistent file can be used for storing pixels
+    across sessions, for archival, or for communicating it with others.
+
+    """
+    # When a temporary file object is deleted, a finalizer will also remove the
+    # actual file associated with it.  However, both the file's path and
+    # whether it is temporary can change over time, and the finalizer has to
+    # keep a reference to both without accidentally keeping the file object
+    # alive.  To achieve this, we store both properties in one-element lists,
+    # and pass those two lists to the finalizer.
+    _path_cell: list[Path]
+    _temp_cell: list[bool]
+
+    @property
+    def path(self) -> Path:
+        return self._path_cell[0]
+
+    @property
+    def is_temporary(self) -> bool:
+        return self._temp_cell[0]
+
+    def rename(
+            self,
+            path: str | PathLike[str],
+            *,
+            overwrite: bool = False,
+            temporary: bool = False) -> Self:
+        path = canonicalize_path(path)
+        if path.exists():
+            if path.is_dir():
+                raise RuntimeError(f"Cannot overwrite existing directory {path}.")
+            if not path.is_file():
+                raise RuntimeError(f"Cannot overwrite non-file {path}.")
+            elif overwrite:
+                path.unlink()
+            else:
+                raise RuntimeError(f"The file {path} already exists.")
+        self._path_cell[0] = self.path.rename(path)
+        self._temp_cell[0] = temporary
+        return self
+
+
+FP = TypeVar('FP', bound=FilePixels)
+
+
+@dataclass(frozen=True)
+class FilePixelsInitializer(ConcretePixelsInitializer[FP]):
+    path: str | PathLike[str]
+    temp: bool
+
+    def initialize(self, /, instance: FP):
+        super().initialize(instance)
+        abspath = Path(self.path).expanduser().resolve(strict=True)
+        instance._path_cell = [abspath]
+        instance._temp_cell = [self.temp]
+
+
+class RawFilePixels(FilePixels):
+    _dtype: npt.DTypeLike
+
+
+RP = TypeVar('RP', bound=RawFilePixels)
+
+
+@dataclass(frozen=True)
+class RawFilePixelsInitializer(FilePixelsInitializer[RP]):
+    """Turn an existing raw file into pixels."""
+    dtype: npt.DTypeLike
+
+    def initialize(self, /, instance: RP):
+        super().initialize(instance)
+        instance._dtype = self.dtype
+
+
+###############################################################################
+###
+### Auxiliary Functions
+
+
 def MissingMethod(self, action) -> TypeError:
     return TypeError(f"No method for {action} objects of type {type(self)}.")
+
 
 def MissingClassmethod(cls, action) -> TypeError:
     return TypeError(f"No classmethod for {action} of type {cls}.")
 
 
-def coerce_to_array(data) -> ArrayLike:
-    # Case 1 - Data is already an array.
-    if isinstance(data, ArrayLike):
-        return data
-    # Case 2 - Data is a nested sequence.
-    elif isinstance(data, Sequence):
-        sizes = []
-        rest = data
-        while isinstance(rest, Sequence):
-            size = len(rest)
-            sizes.append(size)
-            if size == 0:
-                break
-            rest = rest[0]
-        shape = tuple(sizes)
-        # Check whether the shape fits the data, and copy the contents of all
-        # innermost sequences to the resulting values.
-        values = []
-        rank = len(shape)
-        def check_and_copy(seq, depth):
-            if len(seq) != shape[depth]:
-                raise ValueError(
-                    f"List of length {len(seq)} in axis of size {shape[depth]}."
-                )
-            if depth == rank - 1:
-                values.extend(seq)
-                return
-            for elt in seq:
-                check_and_copy(elt, depth+1)
-        check_and_copy(data, 0)
-        return SimpleArray(values, shape)
-    # Case 3 - Data is a scalar.
-    elif isinstance(data, RealLike):
-        return SimpleArray([data], ())
+def canonicalize_path(path) -> Path:
+    return Path(path).expanduser().absolute()
+
+
+def canonicalize_shape(shape) -> tuple[int, ...]:
+    if isinstance(shape, int):
+        dims = (shape,)
     else:
-        raise TypeError(f"Cannot coerce {data} to an array.")
-
-
-Seq = TypeVar("Seq")
-
-def coerce_to_nested_sequence(
-        data,
-        constructor: Callable[[Iterable], Seq] = list) -> Seq | RealLike:
-    if isinstance(data, ArrayLike):
-        def sequify(index, shape) -> Seq | RealLike:
-            if shape == ():
-                return data[*index]
-            return constructor(sequify(index + (i,), shape[1:]) for i in range(shape[0]))
-        return sequify((), data.shape)
-    elif isinstance(data, RealLike):
-        return data
-    elif isinstance(data, Sequence):
-        def convert(elt):
-            if not isinstance(elt, Sequence):
-                assert isinstance(elt, RealLike)
-                return elt
-            else:
-                return constructor(convert(x) for x in elt)
-        return convert(data)
-    else:
-        raise TypeError(f"Cannot coerce {data} to a nested sequence.")
+        dims = tuple(int(x) for x in shape)
+        return dims
+    for dim in dims:
+        if dim < 0:
+            raise TypeError(f"Not a valid shape dimension: {dim}")
+    return dims
 
 
 def canonicalize_index(index, shape: tuple) -> tuple[int | slice, ...]:
@@ -1078,44 +1152,102 @@ def canonicalize_window_sizes(
     return window_sizes
 
 
+def pixelize(a: Pixels | Real, b: Pixels | Real) -> tuple[Pixels, Pixels]:
+    """
+    Coerce the two arguments to the same class.
+    """
+    if isinstance(a, Pixels):
+        if isinstance(b, Pixels):
+            # Handle the case where a and b are Pixels objects.
+            cls = encoding(type(a), type(b))
+            pxa = a.encode_as(cls)
+            pxb = b.encode_as(cls)
+        else:
+            # Handle the case where a is a Pixels object and b is a Real.
+            cls = encoding(type(a))
+            pxa = a.encode_as(cls)
+            val = float(b)
+            pxb = cls(val, black=val, white=val, states=1)
+    else:
+        if isinstance(b, Pixels):
+            # Handle the case where a is a Real and b is a Pixels object.
+            cls = encoding(type(b))
+            pxb = b.encode_as(cls)
+            val = float(a)
+            pxa = cls(val, black=val, white=val, states=1)
+        else:
+            # Handle the case where a and b are Real numbers.
+            cls = encoding()
+            vala = float(a)
+            valb = float(b)
+            pxa = cls(vala, black=vala, white=vala, states=1)
+            pxb = cls(valb, black=valb, white=valb, states=1)
+    return pxa, pxb
+
+
+def align(a: Pixels | Real, b: Pixels | Real) -> tuple[Pixels, Pixels]:
+    """
+    Coerce the two arguments to have the same class and a compatible encoding.
+    """
+    pxa, pxb = pixelize(a, b)
+    # Ensure both Pixels have a compatible encoding.
+    black = min(pxa.black, pxb.black)
+    white = max(pxa.white, pxb.white)
+    eps = (white - black) / _default_states
+    if pxa.states == 1 and pxb.states == 1:
+        if black == white:
+            states = 1
+        else:
+            states = 2
+    elif pxa.states > 1 and pxb.states == 1:
+        states = ceil((white - black) / min(eps, pxa.eps)) + 1
+    elif pxa.states == 1 and pxb.states > 1:
+        states = ceil((white - black) / min(eps, pxb.eps)) + 1
+    else:
+        states = ceil((white - black) / min(eps, pxa.eps, pxb.eps)) + 1
+    pxa = pxa.align_with(black=black, white=white, states=states)
+    pxb = pxb.align_with(black=black, white=white, states=states)
+    return pxa, pxb
+
+
 def broadcast_shapes(shape1: tuple, shape2: tuple) -> tuple:
     """Broadcast the two supplied shapes or raise an error."""
     rank1 = len(shape1)
     rank2 = len(shape2)
-    for axis in range(min(rank1, rank2)):
-        if shape1[axis] != shape2[axis]:
+    axes = []
+    minrank = min(rank1, rank2)
+    for axis in range(minrank):
+        d1, d2 = shape1[axis], shape2[axis]
+        if d1 == 1:
+            axes.append(d2)
+        elif d2 == 1:
+            axes.append(d1)
+        elif d1 == d2:
+            axes.append(d1)
+        else:
             raise ValueError(f"Size mismatch in axis {axis}.")
     if rank1 < rank2:
-        return shape2
+        return tuple(axes) + shape2[minrank:]
     else:
-        return shape1
+        return tuple(axes) + shape1[minrank:]
 
 
-def broadcast(a, b) -> tuple[Pixels, Pixels]:
-    """
-    Ensure the two supplied containers have the same shape and class.
+def broadcast(a: Pixels | Real, b: Pixels | Real) -> tuple[Pixels, Pixels]:
+    pxa, pxb = align(a, b)
+    shape = broadcast_shapes(pxa.shape, pxb.shape)
+    return pxa.broadcast_to(shape), pxb.broadcast_to(shape)
 
-    If either argument is not a pixels container but a real number, convert it
-    to a suitable container with the same power as the other one.  If both
-    arguments are real numbers, raise an error.
-    """
-    if isinstance(a, Pixels):
-        if isinstance(b, Pixels):
-            cls = encoding(type(a), type(b))
-            pxa = encode_as(a, cls)
-            pxb = encode_as(b, cls)
-            shape = broadcast_shapes(pxa.shape, pxb.shape)
-            return (pxa.broadcast_to(shape), pxb.broadcast_to(shape))
-        else:
-            cls = encoding(type(a))
-            pxa = encode_as(a, cls)
-            pxb = cls(b, power=pxa.power, limit=b)
-            return (pxa, pxb.broadcast_to(pxa.shape))
+def dtype_black_white_states(dtype: npt.DTypeLike) -> tuple[Real, Real, int]:
+    dtype = np.dtype(dtype)
+    if dtype == np.float64:
+        return (0.0, 1.0, 2**53)
+    if dtype == np.float32:
+        return (0.0, 1.0, 2**24)
+    elif dtype.kind == 'u':
+        nbits = dtype.itemsize * 8
+        return (0, 2**nbits-1, 2**nbits)
+    elif dtype.kind == 'i':
+        nbits = dtype.itemsize * 8
+        return (-(2**(nbits-1)), (2**(nbits-1))-1, 2**nbits)
     else:
-        if isinstance(b, Pixels):
-            cls = encoding(type(b))
-            pxb = encode_as(b, cls)
-            pxa = cls(a, power=pxb.power, limit=a)
-            return (pxa.broadcast_to(pxb.shape), pxb)
-        else:
-            raise TypeError("Cannot broadcast two scalars.")
+        raise TypeError(f"Cannot convert {dtype} objects to pixels values.")

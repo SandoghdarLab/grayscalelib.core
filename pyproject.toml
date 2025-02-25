@@ -7,7 +7,7 @@ authors = [
     { name = "Marco Heisig" },
 ]
 keywords = ["grayscale", "video", "image", "pixel"]
-dependencies = []
+dependencies = ["numpy"]
 dynamic = ["version"]
 
 [project.optional-dependencies]
@@ -56,8 +56,14 @@ ignore = [
     "E741", # variables named I, O, or l
 ]
 
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]
+
 [tool.pyright]
 include = ["src"]
+exclude = [".venv"]
+venv = ".venv"
+venvPath = "."
 pythonVersion = "3.11"
-typeCheckingMode = "strict"
-reportMissingImports = true
