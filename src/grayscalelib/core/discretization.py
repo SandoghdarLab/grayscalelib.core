@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol, NamedTuple
+from typing import NamedTuple
 
 class ContinuousInterval(NamedTuple):
     """The closed interval of floating-point numbers."""
@@ -25,34 +25,37 @@ class Discretization():
             self,
             domain: tuple[float, float],
             codomain: tuple[int, int],
+            flip: bool = False,
             *,
             _inverse: InverseDiscretization | None = None):
         # Normalize the domain.
         if domain[1] < domain[0]:
             fhi, flo = domain
-            i2, i1 = codomain
+            flip = not flip
         else:
-            (flo, fhi) = domain
-            (i1, i2) = codomain
-        # Compute the coefficients.
-        dy = i2 - i1
-        dx = fhi - flo
-        a = dy / dx if dx > 0.0 else 0.0
+            flo, fhi = domain
         # Normalize the codomain.
-        if i2 < i1:
-            ilo, ihi = i2, i1
-            a = -a
+        if codomain[1] < codomain[0]:
+            ihi, ilo = codomain
+            flip = not flip
         else:
-            ilo, ihi = i1, i2
-        b = ilo - a * flo
-        # Recompute ilo and ihi
-        ilo = round(flo * a + b)
-        ihi = round(fhi * a + b)
-        # Ensure that if the codomain has only one element, the domain also has
-        # only one element that is the average of flo and fhi.
+            ilo, ihi = codomain
+        # Ensure that if either domain or codomain has only one element, so
+        # does the other.
         if ilo == ihi:
             avg = (fhi + flo) / 2
             flo, fhi = avg, avg
+        if flo == fhi:
+            ilo, ihi = ilo, ilo
+        # Compute the coefficients.
+        dy = ihi - ilo
+        dx = fhi - flo
+        a = dy / dx if dx > 0.0 else 0.0
+        if flip:
+            a = -a
+            b = ihi - a * flo
+        else:
+            b = ilo - a * flo
         _domain = ContinuousInterval(flo, fhi)
         _codomain = DiscreteInterval(ilo, ihi)
         # Set all the attributes.
@@ -61,7 +64,7 @@ class Discretization():
         self._domain = _domain
         self._codomain = _codomain
         if _inverse is None:
-            _inverse = InverseDiscretization(_codomain, _domain, _inverse=self)
+            _inverse = InverseDiscretization(_codomain, _domain, flip=flip, _inverse=self)
             assert _inverse.codomain == self._domain
         self._inverse = _inverse
 
@@ -80,6 +83,10 @@ class Discretization():
     @property
     def b(self):
         return self._b
+
+    @property
+    def flip(self) -> bool:
+        return self._a < 0
 
     @property
     def inverse(self):
@@ -108,9 +115,10 @@ class Discretization():
     def __repr__(self) -> str:
         flo, fhi = self.domain
         ilo, ihi = self.codomain
-        if self.a < 0:
-            ilo, ihi = ihi, ilo
-        return f"Discretization(({flo}, {fhi}), ({ilo}, {ihi}))"
+        if self.a >= 0:
+            return f"Discretization(({flo}, {fhi}), ({ilo}, {ihi}))"
+        else:
+            return f"Discretization(({flo}, {fhi}), ({ilo}, {ihi}), flip=True)"
 
     def __eq__(self, other):
         if not isinstance(other, Discretization):
@@ -130,38 +138,44 @@ class InverseDiscretization():
             self,
             domain: tuple[int, int],
             codomain: tuple[float, float],
+            flip: bool = False,
             *,
             _inverse: Discretization | None = None):
         # Normalize the domain.
         if domain[1] < domain[0]:
             ihi, ilo = domain
-            f2, f1 = codomain
+            flip = not flip
         else:
-            (ilo, ihi) = domain
-            (f1, f2) = codomain
-        # Compute the coefficients.
-        dy = f2 - f1
-        dx = ihi - ilo
-        a = dy / dx if dx > 0.0 else 0.0
+            ilo, ihi = domain
         # Normalize the codomain.
-        if f2 < f1:
-            flo, fhi = f2, f1
-            a = -a
+        if codomain[1] < codomain[0]:
+            fhi, flo = codomain
+            flip = not flip
         else:
-            flo, fhi = f1, f2
-        b = flo - a * ilo
-        # Ensure that if the domain has only one element, the codomain also has
-        # only one element that is the average of flo and fhi.
+            flo, fhi = codomain
+        # Ensure that if either domain or codomain has only one element, so
+        # does the other.
         if ilo == ihi:
             avg = (fhi + flo) / 2
             flo, fhi = avg, avg
+        if flo == fhi:
+            ilo, ihi = ilo, ilo
+        # Compute the coefficients.
+        dy = fhi - flo
+        dx = ihi - ilo
+        a = dy / dx if dx > 0.0 else 0.0
+        if flip:
+            a = -a
+            b = fhi - a * ilo
+        else:
+            b = flo - a * ilo
         # Set all the attributes.
         self._a = a
         self._b = b
         self._domain = DiscreteInterval(ilo, ihi)
         self._codomain = ContinuousInterval(flo, fhi)
         if _inverse is None:
-            _inverse = Discretization(codomain, domain, _inverse=self)
+            _inverse = Discretization(codomain, domain, flip=flip, _inverse=self)
         self._inverse = _inverse
 
     @property
@@ -181,6 +195,10 @@ class InverseDiscretization():
         return self._b
 
     @property
+    def flip(self) -> bool:
+        return self._a < 0
+
+    @property
     def inverse(self) -> Discretization:
         return self._inverse
 
@@ -196,9 +214,10 @@ class InverseDiscretization():
     def __repr__(self) -> str:
         ilo, ihi = self.domain
         flo, fhi = self.codomain
-        if self.a < 0:
-            flo, fhi = fhi, flo
-        return f"InverseDiscretization(({ilo}, {ihi}), ({flo}, {fhi}))"
+        if self.a >= 0:
+            return f"InverseDiscretization(({ilo}, {ihi}), ({flo}, {fhi}))"
+        else:
+            return f"InverseDiscretization(({ilo}, {ihi}), ({flo}, {fhi}), flip=True)"
 
     def __eq__(self, other):
         if not isinstance(other, InverseDiscretization):

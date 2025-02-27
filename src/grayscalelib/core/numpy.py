@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from typing import Any, Self, TypeVar
+from typing import Self, TypeVar
 
 from itertools import product
 
@@ -61,7 +61,10 @@ class NumpyPixels(ConcretePixels):
         raw = self._raw.transpose(permutation)
         return type(self)(NumpyPixelsInitializer(raw.shape, self.discretization, raw))
 
-    def _align_with_(self, black: float, white: float, states: int) -> Self:
+    def _rediscretize_(self, dr: Discretization) -> Self:
+        return type(self)(NumpyPixelsInitializer(self.shape, dr, self._raw))
+
+    def _reencode_(self, black: float, white: float, states: int) -> Self:
         i2f = self.discretization.inverse
         f2i = Discretization((black, white), (0, max(0, states-1)))
         a = i2f.a * f2i.a
@@ -116,24 +119,20 @@ class NumpyPixels(ConcretePixels):
         array = np.logical_xor(a, b).astype(np.uint8)
         return type(self)(NumpyPixelsInitializer(array.shape, boolean_discretization, array))
 
-    def _invert_(self) -> Self:
-        raw =  self._discretization.codomain.hi - self._raw
-        return type(self)(NumpyPixelsInitializer(raw.shape, self.discretization, raw))
-
-    def _add_(self, other: Self) -> Self:
-        d1 = self.discretization
-        d2 = other.discretization
-        fmin = d1.domain.lo + d2.domain.lo
-        fmax = d1.domain.hi + d2.domain.hi
-        imin = d1.codomain.lo + d2.codomain.lo
-        imax = d1.codomain.hi + d2.codomain.hi
-        discretization = Discretization((fmin, fmax), (imin, imax))
-        dtype = integer_dtype(imin, imax)
-        raw = np.add(self._raw, other.raw, dtype=dtype)
-        return type(self)(NumpyPixelsInitializer(raw.shape, discretization, raw))
-
-    def _sub_(self, other: Self) -> Self:
-        pass # TODO
+    def _add_(self, other: Self, dr: Discretization) -> Self:
+        idtype = integer_dtype(dr.codomain.lo, dr.codomain.hi)
+        fdtype = np.float64 if dr.states > 2**24 else np.float32
+        d1 = self.discretization.inverse
+        d2 = other.discretization.inverse
+        # x = (d1.a * i + d1.b) + (d2.a * j  + d2.b)
+        # k = round( x * dr.a + dr.b)
+        # k = round( d1.a * dr.a * i + d2.a * dr.a * j + (d1.b + d2.b) * dr.a + dr.b )
+        # k = round( factor1 * i + factor2 * j + offset )
+        factor1 = fdtype(d1.a * dr.a)
+        factor2 = fdtype(d2.a * dr.a)
+        offset  = fdtype((d1.b + d2.b) * dr.a + dr.b)
+        raw = np.round(factor1 * self._raw + factor2 * other._raw + offset).astype(idtype)
+        return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
 
     def _mul_(self, other: Self) -> Self:
         pass # TODO

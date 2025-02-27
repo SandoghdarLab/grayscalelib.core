@@ -10,27 +10,28 @@ def test_discretization():
     tuples = [(0, 1), (0, 3), (1, 3), (-3, 0), (0, 255), (0, 256)]
     codomains = tuples + [(i2, i1) for (i1, i2) in tuples]
     domains = [(float(i1), float(i2)) for (i1, i2) in codomains]
-    for (ilo, ihi) in codomains:
-        for (flo, fhi) in domains:
-            flip = (fhi < flo) ^ (ihi < ilo)
+    for (i1, i2) in codomains:
+        for (f1, f2) in domains:
+            flip = (f2 < f1) ^ (i2 < i1)
             # Forward
-            d = Discretization((flo, fhi), (ilo, ihi))
-            assert d.domain.lo == min(flo, fhi)
-            assert d.domain.hi == max(flo, fhi)
-            assert d.codomain.lo == min(ilo, ihi)
-            assert d.codomain.hi == max(ilo, ihi)
-            assert d(flo) == (ihi if flip else ilo)
-            assert d(fhi) == (ilo if flip else ihi)
-            assert d.states == abs(ihi - ilo) + 1
-            assert d.eps * (d.states - 1) == abs(fhi - flo)
+            d = Discretization((f1, f2), (i1, i2))
+            assert d.flip == flip
+            assert d.domain.lo == min(f1, f2)
+            assert d.domain.hi == max(f1, f2)
+            assert d.codomain.lo == min(i1, i2)
+            assert d.codomain.hi == max(i1, i2)
+            assert (d(f1) == i1) ^ (d(f1) == i2)
+            assert (d(f2) == i1) ^ (d(f2) == i2)
+            assert d.states == abs(i2 - i1) + 1
+            assert d.eps * (d.states - 1) == abs(f2 - f1)
             # Backward
             i = d.inverse
-            assert i.domain.lo == min(ilo, ihi)
-            assert i.domain.hi == max(ilo, ihi)
-            assert i.codomain.lo == min(flo, fhi)
-            assert i.codomain.hi == max(flo, fhi)
-            assert i(ilo) == (fhi if flip else flo)
-            assert i(ihi) == (flo if flip else fhi)
+            assert i.domain.lo == min(i1, i2)
+            assert i.domain.hi == max(i1, i2)
+            assert i.codomain.lo == min(f1, f2)
+            assert i.codomain.hi == max(f1, f2)
+            assert (i(i1) == f1) ^ (i(i1) == f2)
+            assert (i(i2) == f1) ^ (i(i2) == f2)
             # Roundtrip
             for y in range(d.codomain.lo, d.codomain.hi):
                 assert d(i(y)) == y

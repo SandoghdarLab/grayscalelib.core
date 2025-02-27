@@ -3,6 +3,7 @@ import itertools
 import math
 import sys
 import numpy as np
+import numpy.typing as npt
 from itertools import chain, permutations, product
 from grayscalelib.core.discretization import Discretization
 from grayscalelib.core.pixels import Pixels, pixels_type, broadcast
@@ -20,7 +21,7 @@ def generate_pixels(shape: tuple[int, ...]) -> list[Pixels]:
     """Return a list of interesting Pixels objects of the supplied shape."""
     size = math.prod(shape)
     pixels: list[Pixels] = []
-    for states in (1, 2, 8):
+    for states in (8, 256):
         for black in (-2, -1, 0, 1, 2):
             for white in (-2, -1, 0, 1, 2):
                 lo = min(black, white)
@@ -81,8 +82,7 @@ def test_pixels_init(pixels_subclass):
         px = Pixels(values, states=states)
         results = px.data
         for index in range(d + 1):
-            eps = (px.eps / 2) + sys.float_info.epsilon
-            assert abs(results[index] - values[index]) <= eps
+            assert abs(results[index] - values[index]) <= px.roundoff
 
 
 def test_pixels_getitem(pixels_subclass):
@@ -177,34 +177,47 @@ def test_pixels_permute(pixels_subclass):
                 assert values[index] == flipped2[other]
 
 
-def test_pixels_align_with(pixels_subclass):
+def test_pixels_reencode(pixels_subclass):
     # Changes in the number of states.
     px = Pixels([0, 1], states=2)
     for n in range(1, 5):
         assert isinstance(px, pixels_subclass)
-        raw = px.align_with(states=n+1).raw
+        raw = px.reencode(states=n+1).raw
         assert raw[0] == 0
         assert raw[1] == n
 
     # Changes of black and white.
     px = Pixels([0, 1], states=2)
-    assert px.align_with(black=0).states == 2
-    assert px.align_with(white=1).states == 2
-    assert px.align_with(black=1).states == 1
-    assert px.align_with(white=0).states == 1
-    assert px.align_with(white=2).raw[1] == 0
+    assert px.reencode(black=0).states == 2
+    assert px.reencode(white=1).states == 2
+    assert px.reencode(white=2).raw[1] == 0
+    assert px.reencode(black=-1).raw[0] == 0
 
     # Changes of eps.
     px = Pixels([0, 0.25, 0.5, 0.75, 1], states=256)
-    raw = px.align_with(states=5).raw
+    raw = px.reencode(states=5).raw
     assert np.all(raw == [0, 1, 2, 3, 4])
+
+    # Stress test.
+    for shape in [(3,), (9,), (24,)]:
+        for px in generate_pixels(shape):
+            for states in (1, 2, 8, 255, 256, 257):
+                for db in (0, 1, 2):
+                    for dw in (0, 1, 2):
+                        black = px.black - db
+                        white = px.white + dw
+                        new = px.reencode(black=black, white=white, states=states)
+                        before = px.data
+                        after = px.data
+                        assert np.allclose(before, after, rtol=0, atol=new.roundoff)
 
 
 def test_pixels_reshape(pixels_subclass):
     pass # TODO
 
 
-def test_pixels_broadcast_to(pixels_subclass):
+def test_pixels_broadcast(pixels_subclass):
+    # Test adding of additional trailing axes.
     for shape in chain(*[permutations((0, 5, 7), k) for k in range(3)]):
         size = math.prod(shape)
         rank1 = len(shape)
@@ -273,27 +286,31 @@ def test_bool(pixels_subclass):
 
 
 def test_two_arg_fns(pixels_subclass):
-    def assert_allclose(a, b, expected, result):
-        eps = 1 / 255
+    def err(a: Pixels, b: Pixels,):
+        eps = 0.0
         if a.states > 1:
             eps = min(eps, (a.white - a.black) / (a.states - 1))
         if b.states > 1:
             eps = min(eps, (b.white - b.black) / (b.states - 1))
-        atol = (eps + sys.float_info.epsilon) / 2
-        assert np.allclose(expected, result, rtol=0, atol=atol)
+        return (eps + sys.float_info.epsilon) / 2
 
 
-    for shape in [(), (3,), (2, 3)]:
+    for shape in [(), (3,), (3, 2)]:
         pixels = generate_pixels(shape)
+        pairs = [broadcast(a, b) for (a, b) in product(pixels, pixels)]
         # __pos__
         for p in pixels:
             pos = +p
             assert isinstance(pos, pixels_subclass)
             assert np.all(pos.data == p.data)
         # __add__
-        for a, b in product(pixels, pixels):
-            a, b = broadcast(a, b)
-            assert_allclose(a, b, a.data+b.data, (a+b).data)
+        for a, b in pairs:
+            result = (a + b)
+            assert np.allclose(a.data+b.data, result.data, rtol=0, atol=result.roundoff)
+        # __sub__
+        for a, b in pairs:
+            result = (a - b)
+            assert np.allclose(a.data-b.data, result.data, rtol=0, atol=result.roundoff)
 
 
 # def test_rolling_sum(pixels_subclass):

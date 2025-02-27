@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 from dataclasses import dataclass
 
-from math import ceil, prod
+from math import prod
 
 from os import PathLike
 
@@ -15,6 +15,8 @@ from pathlib import Path
 from types import EllipsisType
 
 from typing import Generic, Protocol, Self, TypeVar, runtime_checkable
+
+from sys import float_info
 
 import numpy as np
 
@@ -133,10 +135,7 @@ class Initializer(Generic[T]):
     """
 
     def initialize(self, /, instance: T) -> None:
-        raise MissingMethod(
-            self,
-            f"initialize an instance of type {type(instance)} with a"
-        )
+        raise MissingMethod(instance, "initializing")
 
 class Pixels(Encodable):
     """A container for non-negative values with uniform spacing.
@@ -242,6 +241,13 @@ class Pixels(Encodable):
         return self.discretization.eps
 
     @property
+    def roundoff(self) -> float:
+        """
+        The maximum error introduced any operation on these Pixels.
+        """
+        return 0.5 * self.eps + float_info.epsilon
+
+    @property
     @abstractmethod
     def data(self) -> npt.NDArray[np.float64]:
         """
@@ -296,7 +302,7 @@ class Pixels(Encodable):
         A textual representation of this container.
         """
         name = type(self).__name__
-        return f"{name}({self.data}, shape={self.shape}, discretization={self.discretization})"
+        return f"{name}({self.data}, discretization={self.discretization})"
 
     # Conversion from something to pixels.
 
@@ -405,27 +411,72 @@ class Pixels(Encodable):
         _ = permutation
         raise MissingMethod(self, "permuting")
 
-    # align_with
+    # rediscretize
 
-    def align_with(
+    def rediscretize(self, discretization: Discretization):
+        cls = encoding(type(self))
+        result = self.encode_as(cls)._rediscretize_(discretization)
+        assert result.discretization == discretization
+        assert result.shape == self.shape
+        return result
+
+    def _rediscretize_(self, dr) -> Self:
+        _ = dr
+        raise MissingMethod(self, "rediscretizing")
+
+    # reencode
+
+    def reencode(
             self,
             *,
+            cls: type[Pixels] | None = None,
             black: Real | None = None,
             white: Real | None = None,
             states: int | None = None) -> Pixels:
-        """Change the internal encoding of some Pixels to be aligned with the
-        supplied discretization"""
+        """Replace each pixel with the closest value in the partitioning of
+        [black, white] into the supplied number of equidistant states.
+
+        Parameters
+        ----------
+        self: Pixels
+            The pixels being reencoded.
+        cls: type[Pixels]
+            The class of the resulting container.
+        black: Real or None
+            The value corresponding to minimum intensity.
+        white: Real or None
+            The value corresponding to maximum intensity.
+        states: int or None
+            The number of discrete, equidistant states of the space being
+            aligned with.
+
+        Returns
+        -------
+        Pixels
+            A container with the same shape as the supplied one, but possibly
+            a different discretization.
+        """
+        _cls = type(self) if cls is None else cls
         _black = self.black if black is None else float(black)
         _white = self.white if white is None else float(white)
         _states = self.states if states is None else states
-        result = self._align_with_(_black, _white, _states)
+        if _white < _black:
+            _black, _white = _white, _black
+        if _states < 1:
+            raise TypeError("Discretization requires at least one state.")
+        if not (_black <= self.black <= self.white <= _white):
+            raise TypeError("Bounds must encompass the full pixel range.")
+        try:
+            result = self.encode_as(_cls)._reencode_(_black, _white, _states)
+        except MissingMethod:
+            result = self._reencode_(_black, _white, _states).encode_as(_cls)
         assert result.shape == self.shape
         assert result.states <= _states
         return result
 
-    def _align_with_(self, black: float, white: float, states: int) -> Pixels:
+    def _reencode_(self, black: float, white: float, states: int) -> Pixels:
         _, _, _ = black, white, states
-        raise MissingMethod(self, "rescaling")
+        raise MissingMethod(self, "reencoding")
 
     # reshape
 
@@ -603,20 +654,23 @@ class Pixels(Encodable):
 
     def __invert__(self) -> Pixels:
         """
-        Flip the sign of each pixel.
+        Flip all values such that the black and white spectrum is reversed.
         """
         cls = encoding(type(self))
-        result = self.encode_as(cls)._invert_()
-        assert result.shape == self.shape
-        assert result.states == self.states
-        return result
-
-    def _invert_(self) -> Self:
-        raise MissingMethod(self, "inverting")
+        px = self.encode_as(cls)
+        pxd = px.discretization
+        return px.rediscretize(Discretization(pxd.domain, pxd.codomain, not pxd.flip))
 
     # neg
 
-    __neg__ = __invert__
+    def __neg__(self) -> Pixels:
+        """
+        Flip all values such that the black and white spectrum is reversed.
+        """
+        cls = encoding(type(self))
+        px = self.encode_as(cls)
+        pxd = px.discretization
+        return px._rediscretize_(Discretization((-pxd.domain.lo, -pxd.domain.hi), pxd.codomain, pxd.flip))
 
     # pos
 
@@ -637,17 +691,30 @@ class Pixels(Encodable):
         """
         Add the values of the two containers.
         """
-        a, b = broadcast(self, other)
-        result = a._add_(b)
-        assert result.shape == a.shape
+        px1, px2 = broadcast(self, other)
+        # Compute the resulting discretization
+        black = px1.black + px2.black
+        white = px1.white + px2.white
+        if black == white:
+            return type(self)(black, black=black, white=white, states=1).broadcast_to(self.shape)
+        elif px1.states == 1:
+            states = round((white - black) / px2.eps) + 1
+        elif px2.states == 1:
+            states = round((white - black) / px1.eps) + 1
+        else:
+            states = round((white - black) / min(px1.eps, px2.eps)) + 1
+        dr = Discretization((black, white), (0, states-1))
+        # Compute the result.
+        result = px1._add_(px2, dr)
+        assert result.shape == px1.shape
         return result
 
     def __radd__(self, other):
         b, a = pixelize(self, other)
         return a.__add__(b)
 
-    def _add_(self: Self, other: Self) -> Self:
-        _ = other
+    def _add_(self: Self, other: Self, dr: Discretization) -> Self:
+        _, _ = other, dr
         raise MissingMethod(self, "adding")
 
     # sub
@@ -657,16 +724,11 @@ class Pixels(Encodable):
         Subtract the values of the two containers.
         """
         a, b = broadcast(self, other)
-        result = a._sub_(b)
-        pass # TODO
+        return a.__add__(-b)
 
     def __rsub__(self, other):
         b, a = pixelize(self, other)
-        return a.__sub__(b)
-
-    def _sub_(self: Self, other: Self) -> Self:
-        _ = other
-        raise MissingMethod(self, "subtracting")
+        return a.__add__(-b)
 
     # mul
 
@@ -1057,12 +1119,24 @@ class RawFilePixelsInitializer(FilePixelsInitializer[RP]):
 ### Auxiliary Functions
 
 
-def MissingMethod(self, action) -> TypeError:
-    return TypeError(f"No method for {action} objects of type {type(self)}.")
+class MissingMethod(TypeError):
+    instance: object
+    action: str
+
+    def __init__(self, instance: object, action: str):
+        super().__init__(f"No method for {action} objects of type {type(instance)}.")
+        self.instance = instance
+        self.action = action
 
 
-def MissingClassmethod(cls, action) -> TypeError:
-    return TypeError(f"No classmethod for {action} of type {cls}.")
+class MissingClassmethod(TypeError):
+    cls: type
+    action: str
+
+    def __init__(self, cls: type, action: str):
+        super().__init__(f"No method for {action} objects of type {cls}.")
+        self.cls = cls
+        self.action = action
 
 
 def canonicalize_path(path) -> Path:
@@ -1185,31 +1259,6 @@ def pixelize(a: Pixels | Real, b: Pixels | Real) -> tuple[Pixels, Pixels]:
     return pxa, pxb
 
 
-def align(a: Pixels | Real, b: Pixels | Real) -> tuple[Pixels, Pixels]:
-    """
-    Coerce the two arguments to have the same class and a compatible encoding.
-    """
-    pxa, pxb = pixelize(a, b)
-    # Ensure both Pixels have a compatible encoding.
-    black = min(pxa.black, pxb.black)
-    white = max(pxa.white, pxb.white)
-    eps = (white - black) / _default_states
-    if pxa.states == 1 and pxb.states == 1:
-        if black == white:
-            states = 1
-        else:
-            states = 2
-    elif pxa.states > 1 and pxb.states == 1:
-        states = ceil((white - black) / min(eps, pxa.eps)) + 1
-    elif pxa.states == 1 and pxb.states > 1:
-        states = ceil((white - black) / min(eps, pxb.eps)) + 1
-    else:
-        states = ceil((white - black) / min(eps, pxa.eps, pxb.eps)) + 1
-    pxa = pxa.align_with(black=black, white=white, states=states)
-    pxb = pxb.align_with(black=black, white=white, states=states)
-    return pxa, pxb
-
-
 def broadcast_shapes(shape1: tuple, shape2: tuple) -> tuple:
     """Broadcast the two supplied shapes or raise an error."""
     rank1 = len(shape1)
@@ -1233,9 +1282,10 @@ def broadcast_shapes(shape1: tuple, shape2: tuple) -> tuple:
 
 
 def broadcast(a: Pixels | Real, b: Pixels | Real) -> tuple[Pixels, Pixels]:
-    pxa, pxb = align(a, b)
+    pxa, pxb = pixelize(a, b)
     shape = broadcast_shapes(pxa.shape, pxb.shape)
     return pxa.broadcast_to(shape), pxb.broadcast_to(shape)
+
 
 def dtype_black_white_states(dtype: npt.DTypeLike) -> tuple[Real, Real, int]:
     dtype = np.dtype(dtype)
