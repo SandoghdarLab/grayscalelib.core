@@ -659,7 +659,8 @@ class Pixels(Encodable):
         cls = encoding(type(self))
         px = self.encode_as(cls)
         pxd = px.discretization
-        return px.rediscretize(Discretization(pxd.domain, pxd.codomain, not pxd.flip))
+        dr = Discretization(pxd.domain, pxd.codomain, not pxd.flip)
+        return px.rediscretize(dr)
 
     # neg
 
@@ -670,7 +671,8 @@ class Pixels(Encodable):
         cls = encoding(type(self))
         px = self.encode_as(cls)
         pxd = px.discretization
-        return px._rediscretize_(Discretization((-pxd.domain.lo, -pxd.domain.hi), pxd.codomain, pxd.flip))
+        dr = Discretization((-pxd.domain.lo, -pxd.domain.hi), pxd.codomain, pxd.flip)
+        return px._rediscretize_(dr)
 
     # pos
 
@@ -696,13 +698,16 @@ class Pixels(Encodable):
         black = px1.black + px2.black
         white = px1.white + px2.white
         if black == white:
-            return type(self)(black, black=black, white=white, states=1).broadcast_to(self.shape)
-        elif px1.states == 1:
-            states = round((white - black) / px2.eps) + 1
-        elif px2.states == 1:
-            states = round((white - black) / px1.eps) + 1
-        else:
-            states = round((white - black) / min(px1.eps, px2.eps)) + 1
+            return type(px1)(black, black=black, white=white, states=1).broadcast_to(self.shape)
+        if px1.states == 1:
+            px2d = px2.discretization
+            dr = Discretization((black, white), px2d.codomain, px2d.flip)
+            return px2.rediscretize(dr)
+        if px2.states == 1:
+            px1d = px1.discretization
+            dr = Discretization((black, white), px1d.codomain, px1d.flip)
+            return px1.rediscretize(dr)
+        states = round((white - black) / min(px1.eps, px2.eps)) + 1
         dr = Discretization((black, white), (0, states-1))
         # Compute the result.
         result = px1._add_(px2, dr)
@@ -736,16 +741,39 @@ class Pixels(Encodable):
         """
         Multiply the values of the containers.
         """
-        a, b = broadcast(self, other)
-        result = a._mul_(b)
-        return result # TODO
+        # TODO
+        px1, px2 = broadcast(self, other)
+        # Compute the resulting discretization
+        x1, x2 = px1.black, px1.white
+        y1, y2 = px2.black, px2.white
+        f1, f2, f3, f4 = x1*y1, x1*y2, x2*y1, x2*y2
+        black = min(f1, f2, f3, f4)
+        white = max(f1, f2, f3, f4)
+        if black == white:
+            return type(px1)(black, black=black, white=white, states=1).broadcast_to(self.shape)
+        if px1.states == 1:
+            px2d = px2.discretization
+            flip = px2d.flip ^ (px1.black < 0)
+            dr = Discretization((black, white), px2d.codomain, flip)
+            return px2.rediscretize(dr)
+        if px2.states == 1:
+            px1d = px1.discretization
+            flip = px1d.flip ^ (px2.black < 0)
+            dr = Discretization((black, white), px1d.codomain, flip)
+            return px1.rediscretize(dr)
+        states = px1.states * px2.states
+        dr = Discretization((black, white), (0, states-1))
+        # Compute the result.
+        result = px1._mul_(px2, dr)
+        assert result.shape == px1.shape
+        return result
 
     def __rmul__(self, other):
         b, a = pixelize(self, other)
         return a.__mul__(b)
 
-    def _mul_(self: Self, other: Self) -> Self:
-        _ = other
+    def _mul_(self: Self, other: Self, dr: Discretization) -> Self:
+        _, _ = other, dr
         raise MissingMethod(self, "multiplying")
 
     # pow

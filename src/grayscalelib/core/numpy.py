@@ -134,8 +134,25 @@ class NumpyPixels(ConcretePixels):
         raw = np.round(factor1 * self._raw + factor2 * other._raw + offset).astype(idtype)
         return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
 
-    def _mul_(self, other: Self) -> Self:
-        pass # TODO
+    def _mul_(self, other: Self, dr: Discretization) -> Self:
+        idtype = integer_dtype(dr.codomain.lo, dr.codomain.hi)
+        fdtype = np.float64 if dr.states > 2**12 else np.float32
+        d1 = self.discretization.inverse
+        d2 = other.discretization.inverse
+        # x = (d1.a * i + d1.b) * (d2.a * j  + d2.b)
+        # x = (d1.a * d2.a * i * j) + (d1.a * d2.b * i) + (d2.a * d1.b * j) + (d1.b * d2.b)
+        # k = round( x * dr.a + dr.b)
+        # k = round( (d1.a * d2.a * dr.a * i * j) + (d1.a * dr.a * d2.b * i) + (d2.a * dr.a * d1.b * j) + (d1.b * d2.b * dr.a) + dr.b )
+        # k = round( (factor1 * i * j) + (factor2 * i) + (factor3 * j) + offset)
+        factor1 = fdtype(d1.a * d2.a * dr.a)
+        factor2 = fdtype(d1.a * dr.a * d2.b)
+        factor3 = fdtype(d2.a * dr.a * d1.b)
+        offset  = fdtype((d1.b * d2.b * dr.a) + dr.b)
+        term1 = (factor1 * self._raw) * other._raw
+        term2 = factor2 * self._raw
+        term3 = factor3 * other._raw
+        raw = np.round(term1 + term2 + term3 + offset).astype(idtype)
+        return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
 
     def _pow_(self, other: float) -> Self:
         pass # TODO

@@ -311,6 +311,10 @@ def test_two_arg_fns(pixels_subclass):
         for a, b in pairs:
             result = (a - b)
             assert np.allclose(a.data-b.data, result.data, rtol=0, atol=result.roundoff)
+        # __mul__
+        for a, b in pairs:
+            result = (a * b)
+            assert np.allclose(a.data*b.data, result.data, rtol=0, atol=result.roundoff)
 
 
 # def test_rolling_sum(pixels_subclass):
