@@ -14,9 +14,11 @@ from pathlib import Path
 
 from types import EllipsisType
 
-from typing import Generic, Protocol, Self, TypeVar, runtime_checkable
+from typing import Callable, Generic, Protocol, Self, TypeVar, runtime_checkable
 
 from sys import float_info
+
+import operator
 
 import numpy as np
 
@@ -693,25 +695,26 @@ class Pixels(Encodable):
         """
         Add the values of the two containers.
         """
-        px1, px2 = broadcast(self, other)
+        a, b = broadcast(self, other)
         # Compute the resulting discretization
-        black = px1.black + px2.black
-        white = px1.white + px2.white
+        black = a.black + b.black
+        white = a.white + b.white
         if black == white:
-            return type(px1)(black, black=black, white=white, states=1).broadcast_to(self.shape)
-        if px1.states == 1:
-            px2d = px2.discretization
-            dr = Discretization((black, white), px2d.codomain, px2d.flip)
-            return px2.rediscretize(dr)
-        if px2.states == 1:
-            px1d = px1.discretization
-            dr = Discretization((black, white), px1d.codomain, px1d.flip)
-            return px1.rediscretize(dr)
-        states = round((white - black) / min(px1.eps, px2.eps)) + 1
+            return type(a)(black, black=black, white=white, states=1).broadcast_to(a.shape)
+        if a.states == 1:
+            bd = b.discretization
+            dr = Discretization((black, white), bd.codomain, bd.flip)
+            return b.rediscretize(dr)
+        if b.states == 1:
+            ad = a.discretization
+            dr = Discretization((black, white), ad.codomain, ad.flip)
+            return a.rediscretize(dr)
+        states = round((white - black) / min(a.eps, b.eps)) + 1
         dr = Discretization((black, white), (0, states-1))
         # Compute the result.
-        result = px1._add_(px2, dr)
-        assert result.shape == px1.shape
+        result = a._add_(b, dr)
+        assert result.shape == a.shape
+        assert result.discretization == dr
         return result
 
     def __radd__(self, other):
@@ -741,31 +744,31 @@ class Pixels(Encodable):
         """
         Multiply the values of the containers.
         """
-        # TODO
-        px1, px2 = broadcast(self, other)
+        a, b = broadcast(self, other)
         # Compute the resulting discretization
-        x1, x2 = px1.black, px1.white
-        y1, y2 = px2.black, px2.white
+        x1, x2 = a.black, a.white
+        y1, y2 = b.black, b.white
         f1, f2, f3, f4 = x1*y1, x1*y2, x2*y1, x2*y2
         black = min(f1, f2, f3, f4)
         white = max(f1, f2, f3, f4)
         if black == white:
-            return type(px1)(black, black=black, white=white, states=1).broadcast_to(self.shape)
-        if px1.states == 1:
-            px2d = px2.discretization
-            flip = px2d.flip ^ (px1.black < 0)
-            dr = Discretization((black, white), px2d.codomain, flip)
-            return px2.rediscretize(dr)
-        if px2.states == 1:
-            px1d = px1.discretization
-            flip = px1d.flip ^ (px2.black < 0)
-            dr = Discretization((black, white), px1d.codomain, flip)
-            return px1.rediscretize(dr)
-        states = px1.states * px2.states
+            return type(a)(black, black=black, white=white, states=1).broadcast_to(self.shape)
+        if a.states == 1:
+            bd = b.discretization
+            flip = bd.flip ^ (a.black < 0)
+            dr = Discretization((black, white), bd.codomain, flip)
+            return b.rediscretize(dr)
+        if b.states == 1:
+            ad = a.discretization
+            flip = ad.flip ^ (b.black < 0)
+            dr = Discretization((black, white), ad.codomain, flip)
+            return a.rediscretize(dr)
+        states = a.states * b.states
         dr = Discretization((black, white), (0, states-1))
         # Compute the result.
-        result = px1._mul_(px2, dr)
-        assert result.shape == px1.shape
+        result = a._mul_(b, dr)
+        assert result.shape == a.shape
+        assert result.discretization == dr
         return result
 
     def __rmul__(self, other):
@@ -782,8 +785,9 @@ class Pixels(Encodable):
         """
         Raise each value to the specified power.
         """
-        a, b = broadcast(self, exponent)
-        result = a._pow_(b)
+        px1, px2 = broadcast(self, exponent)
+        # Compute the resulting discretization
+        result = px1._pow_(px2)
         return result # TODO
 
     def _pow_(self: Self, other: Self) -> Self:
@@ -840,101 +844,133 @@ class Pixels(Encodable):
         _ = other
         raise MissingMethod(self, "floor-dividing")
 
-    # lt
+    # comparisons
 
     def __lt__(self, other) -> Pixels:
         """
         One wherever the left value is smaller than the right, zero otherwise.
         """
         a, b = broadcast(self, other)
-        result = a._lt_(b)
+        # Handle the case where [a.black, a.white] < [b.black, b.white]
+        if a.white < b.black:
+            return type(a)(1, black=1, white=1, states=1).broadcast_to(a.shape)
+        # Handle the case where [b.black, b.white] <= [a.black, a.white]
+        if b.white <= a.black:
+            return type(a)(0, black=0, white=0, states=1).broadcast_to(a.shape)
+        # Ensure that the first operand has more than one state.
+        if a.states == 1:
+            result = b._cmp_(a, operator.gt)
+        else:
+            result = a._cmp_(b, operator.lt)
         assert result.shape == a.shape
-        assert result.discretization == boolean_discretization
         return result
-
-    def _lt_(self: Self, other: Self) -> Self:
-        _ = other
-        raise MissingMethod(self, "comparing")
-
-    # gt
 
     def __gt__(self, other) -> Pixels:
         """
         One wherever the left value is greater than the right, zero otherwise.
         """
         a, b = broadcast(self, other)
-        result = a._gt_(b)
+        # Handle the case where [a.black, a.white] <= [b.black, b.white]
+        if a.white <= b.black:
+            return type(a)(0, black=0, white=0, states=1).broadcast_to(a.shape)
+        # Handle the case where [b.black, b.white] < [a.black, a.white]
+        if b.white <= a.black:
+            return type(a)(1, black=1, white=1, states=1).broadcast_to(a.shape)
+        # Ensure that the first operand has more than one state.
+        if a.states == 1:
+            result = b._cmp_(a, operator.lt)
+        else:
+            result = a._cmp_(b, operator.gt)
         assert result.shape == a.shape
-        assert result.discretization == boolean_discretization
         return result
-
-    def _gt_(self: Self, other: Self) -> Self:
-        return other._lt_(self)
-
-    # le
 
     def __le__(self, other) -> Pixels:
         """
-        One wherever the left value is less than or equal to the right, zero
-        otherwise.
+        One wherever the left value is smaller than or equal to the right, zero otherwise.
         """
         a, b = broadcast(self, other)
-        result = a._le_(b)
+        # Handle the case where [a.black, a.white] <= [b.black, b.white]
+        if a.white <= b.black:
+            return type(a)(1, black=1, white=1, states=1).broadcast_to(a.shape)
+        # Handle the case where [b.black, b.white] < [a.black, a.white]
+        if b.white < a.black:
+            return type(a)(0, black=0, white=0, states=1).broadcast_to(a.shape)
+        # Ensure that the first operand has more than one state.
+        if a.states == 1:
+            result = b._cmp_(a, operator.ge)
+        else:
+            result = a._cmp_(b, operator.le)
         assert result.shape == a.shape
-        assert result.discretization == boolean_discretization
         return result
-
-    def _le_(self: Self, other: Self) -> Self:
-        _ = other
-        raise MissingMethod(self, "comparing")
-
-    # ge
 
     def __ge__(self, other) -> Pixels:
         """
-        One wherever the left value is greater than or equal to the right, zero
-        otherwise.
+        One wherever the left value is greater than or equal to the right, zero otherwise.
         """
         a, b = broadcast(self, other)
-        result = a._ge_(b)
+        # Handle the case where [a.black, a.white] < [b.black, b.white]
+        if a.white < b.black:
+            return type(a)(0, black=0, white=0, states=1).broadcast_to(a.shape)
+        # Handle the case where [b.black, b.white] <= [a.black, a.white]
+        if b.white <= a.black:
+            return type(a)(1, black=1, white=1, states=1).broadcast_to(a.shape)
+        # Ensure that the first operand has more than one state.
+        if a.states == 1:
+            result = b._cmp_(a, operator.le)
+        else:
+            result = a._cmp_(b, operator.ge)
         assert result.shape == a.shape
-        assert result.discretization == boolean_discretization
         return result
-
-    def _ge_(self: Self, other: Self) -> Self:
-        return other._le_(self)
-
-    # eq
 
     def __eq__(self, other) -> Pixels: # type: ignore
         """
         One wherever the left value is equal to the right, zero otherwise.
         """
         a, b = broadcast(self, other)
-        result = a._eq_(b)
+        # Handle the case of identical one-element domains.
+        if a.black == a.white == b.black == b.white:
+            return type(a)(1, black=1, white=1, states=1).broadcast_to(a.shape)
+        # Handle the case of completely disjoint domains.
+        if (a.white < b.black) or (b.white < a.black):
+            return type(a)(0, black=0, white=0, states=1).broadcast_to(a.shape)
+        # Ensure that the first operand has more than one state.
+        if a.states == 1:
+            result = b._cmp_(a, operator.eq)
+        else:
+            result = a._cmp_(b, operator.eq)
         assert result.shape == a.shape
-        assert result.discretization == boolean_discretization
         return result
-
-    def _eq_(self: Self, other: Self) -> Self:
-        _ = other
-        raise MissingMethod(self, "determining the equality of")
-
-    # ne
 
     def __ne__(self, other) -> Pixels: # type: ignore
         """
-        One wherever the left value is different than the right, zero otherwise.
+        One wherever the left value differs from the right, zero otherwise.
         """
         a, b = broadcast(self, other)
-        result = a._ne_(b)
+        # Handle the case of identical one-element domains.
+        if a.black == a.white == b.black == b.white:
+            return type(a)(0, black=0, white=0, states=1).broadcast_to(a.shape)
+        # Handle the case of completely disjoint domains.
+        if (a.white < b.black) or (b.white < a.black):
+            return type(a)(1, black=1, white=1, states=1).broadcast_to(a.shape)
+        # Ensure that the first operand has more than one state.
+        if a.states == 1:
+            result = b._cmp_(a, operator.ne)
+        else:
+            result = a._cmp_(b, operator.ne)
         assert result.shape == a.shape
-        assert result.discretization == boolean_discretization
         return result
 
-    def _ne_(self: Self, other: Self) -> Self:
-        _ = other
-        return (self._eq_(other))._invert_()
+    def _cmp_(self: Self,
+              other: Self,
+              op: Callable[[float, float], bool]) -> Self:
+        """Returns Pixels that are one where the supplied comparison holds, and
+        zero otherwise.
+
+        A caller must ensure that the first two arguments are Pixels of the
+        same class, and that the first argument has more than one state.
+        """
+        _, _ = other, op
+        raise MissingMethod(self, "comparing")
 
     # sum
 

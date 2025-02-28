@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from typing import Self, TypeVar
+from typing import Callable, Self, TypeVar
 
 from itertools import product
 
 from math import prod
+
+import operator
 
 import numpy as np
 
@@ -163,23 +165,42 @@ class NumpyPixels(ConcretePixels):
     def _mod_(self, other: Self) -> Self:
         pass # TODO
 
-    def _lt_(self, other: Self) -> Self:
-        pass # TODO
-
-    def _gt_(self, other: Self) -> Self:
-        pass # TODO
-
-    def _le_(self, other: Self) -> Self:
-        pass # TODO
-
-    def _ge_(self, other: Self) -> Self:
-        pass # TODO
-
-    def _eq_(self, other: Self) -> Self:
-        pass # TODO
-
-    def _ne_(self, other: Self) -> Self:
-        pass # TODO
+    def _cmp_(self, other: Self, op: Callable[[float, float], bool]) -> Self:
+        d1 = self.discretization.inverse
+        d2 = other.discretization.inverse
+        dr = boolean_discretization
+        fdtype = np.float64 if max(d1.states, d2.states) > 2**24 else np.float32
+        assert d1.states > 1
+        # b = (d1.a * i + d1.b) op (d2.a * j  + d2.b)
+        # b = (d1.a * i) op (d2.a * j + d2.b - d1.b)
+        # (d1.a > 0): b = i op ((d2.a / d1.a) * j + (d2.b - d1.b) / d1.a)
+        # (d1.a < 0): b = ((d2.a / d1.a) * j + (d2.b - d1.b) / d1.a) op i
+        factor = fdtype(d2.a / d1.a)
+        offset = fdtype((d2.b - d1.b) / d1.a)
+        term1 = self._raw
+        term2 = factor * other._raw + offset
+        if d1.a > 0:
+            left, right = term1, term2
+        else:
+            left, right = term2, term1
+        # Perform the actual comparison
+        if op is operator.lt:
+            raw = np.less(left, right).astype(np.uint8)
+        elif op is operator.le:
+            raw = np.less_equal(left, right).astype(np.uint8)
+        elif op is operator.gt:
+            raw = np.greater(left, right).astype(np.uint8)
+        elif op is operator.ge:
+            raw = np.greater_equal(left, right).astype(np.uint8)
+        elif op is operator.eq:
+            raw = np.equal(left, right).astype(np.uint8)
+        elif op is operator.ne:
+            raw = np.not_equal(left, right).astype(np.uint8)
+        elif op is operator.ne:
+            raw = np.not_equal(left, right).astype(np.uint8)
+        else:
+            raise TypeError(f"Unknown comparison function: {op}")
+        return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
 
     def _rolling_sum_(self, window_sizes):
         array = self._raw

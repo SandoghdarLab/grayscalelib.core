@@ -202,6 +202,11 @@ class InverseDiscretization():
     def inverse(self) -> Discretization:
         return self._inverse
 
+    @property
+    def states(self):
+        ilo, ihi = self.domain
+        return ihi - ilo + 1
+
     def __call__(self, x: int):
         a, b = self.a, self.b
         ilo, ihi = self.domain

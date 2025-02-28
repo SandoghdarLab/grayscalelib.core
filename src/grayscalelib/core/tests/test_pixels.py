@@ -286,15 +286,6 @@ def test_bool(pixels_subclass):
 
 
 def test_two_arg_fns(pixels_subclass):
-    def err(a: Pixels, b: Pixels,):
-        eps = 0.0
-        if a.states > 1:
-            eps = min(eps, (a.white - a.black) / (a.states - 1))
-        if b.states > 1:
-            eps = min(eps, (b.white - b.black) / (b.states - 1))
-        return (eps + sys.float_info.epsilon) / 2
-
-
     for shape in [(), (3,), (3, 2)]:
         pixels = generate_pixels(shape)
         pairs = [broadcast(a, b) for (a, b) in product(pixels, pixels)]
@@ -315,6 +306,16 @@ def test_two_arg_fns(pixels_subclass):
         for a, b in pairs:
             result = (a * b)
             assert np.allclose(a.data*b.data, result.data, rtol=0, atol=result.roundoff)
+        # __lt__, __gt__, __le__, __ge__, __eq__, __ne__
+        for a, b in pairs:
+            eps = b.eps if a.states == 1 else a.eps if b.states == 1 else min(a.eps, b.eps)
+            ambiguous = abs(a.data - b.data) <= eps
+            assert np.all(((a.data < b.data) == (a < b).data) | ambiguous)
+            assert np.all(((a.data > b.data) == (a > b).data) | ambiguous)
+            assert np.all(((a.data <= b.data) == (a <= b).data) | ambiguous)
+            assert np.all(((a.data >= b.data) == (a >= b).data) | ambiguous)
+            assert np.all(((a.data == b.data) == (a == b).data) | ambiguous)
+            assert np.all(((a.data != b.data) == (a != b).data) | ambiguous)
 
 
 # def test_rolling_sum(pixels_subclass):
