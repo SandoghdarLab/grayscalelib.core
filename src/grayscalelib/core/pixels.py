@@ -993,13 +993,19 @@ class Pixels(Encodable):
         The rolling sum for a given window size.
         """
         window_sizes = canonicalize_window_sizes(window_size, self.shape)
-        cls = encoding(type(self))
-        result = self.encode_as(cls)._rolling_sum_(window_sizes)
+        amount = prod(window_sizes)
+        px = self.encode_as(encoding(type(self)))
+        dself = px.discretization
+        dr = Discretization((dself.domain.lo * amount, dself.domain.hi * amount),
+                            (dself.codomain.lo * amount, dself.codomain.hi * amount),
+                            dself.flip)
+        result = px._rolling_sum_(window_sizes, dr)
         assert result.shape == tuple((s - w + 1) for s, w in zip(self.shape, window_sizes))
+        assert result.discretization == dr
         return result
 
-    def _rolling_sum_(self, window_sizes: tuple[int, ...]) -> Self:
-        _ = window_sizes
+    def _rolling_sum_(self, window_sizes: tuple[int, ...], dr: Discretization) -> Self:
+        _, _ = window_sizes, dr
         raise MissingMethod(self, "computing the sum of")
 
     # average

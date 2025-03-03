@@ -14,6 +14,8 @@ import numpy as np
 
 import numpy.typing as npt
 
+from numpy.lib.stride_tricks import sliding_window_view
+
 from grayscalelib.core.pixels import Discretization, Initializer, ConcretePixels, ConcretePixelsInitializer, register_default_pixels_type, boolean_discretization
 
 
@@ -202,33 +204,12 @@ class NumpyPixels(ConcretePixels):
             raise TypeError(f"Unknown comparison function: {op}")
         return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
 
-    def _rolling_sum_(self, window_sizes):
-        array = self._raw
-        for axis, window_size in enumerate(window_sizes):
-            shape = array.shape
-            oldsize = shape[axis]
-            newsize = oldsize - window_size + 1
-            values: list[int] = []
-            for prefix in product(*[range(s) for s in shape[:axis]]):
-                rest = shape[axis+1:]
-                suffixes = list(product(*[range(s) for s in rest])) or (())
-                sums = [0] * prod(rest)
-                # Compute the sums of the first window_size elements.
-                for index in range(window_size):
-                    for pos, suffix in enumerate(suffixes):
-                        sums[pos] += array.item((*prefix, index, *suffix))
-                # Initialize the first entry of the result.
-                values.extend(sums)
-                # Compute the remaining entries of the result by sliding the
-                # window one element at a time.
-                for index in range(1, newsize):
-                    for pos, suffix in enumerate(suffixes):
-                        sums[pos] -= array.item((*prefix, index-1, *suffix))
-                        sums[pos] += array.item((*prefix, index+window_size-1, *suffix))
-                    values.extend(sums)
-            array = NumpyArray(values, shape[:axis] + (newsize,) + shape[axis+1:])
-        limit = prod(window_sizes) * self.limit
-        return self.from_raw(array, self.power, limit)
+    def _rolling_sum_(self, window_sizes, dr):
+        rank = self.rank
+        dtype = integer_dtype(dr.codomain.lo, dr.codomain.hi)
+        view = sliding_window_view(self._raw, window_sizes)
+        raw = view.sum(tuple(range(rank, rank+len(window_sizes))), dtype=dtype)
+        return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
 
 
 register_default_pixels_type(NumpyPixels)
