@@ -1,14 +1,18 @@
 [project]
 name = "grayscalelib.core"
+version = "0.0.1"
 description = "A protocol for manipulating grayscale data."
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "GPL-3.0-or-later"}
 authors = [
     { name = "Marco Heisig" },
 ]
 keywords = ["grayscale", "video", "image", "pixel"]
 dependencies = ["numpy"]
-dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/SandoghdarLab/grayscalelib.core.git"
 
 [project.optional-dependencies]
 dev = [
@@ -24,7 +28,7 @@ test = [
 ]
 
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = ["setuptools>=75.6"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
