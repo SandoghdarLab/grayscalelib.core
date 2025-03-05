@@ -16,15 +16,12 @@ Repository = "https://github.com/SandoghdarLab/grayscalelib.core.git"
 
 [project.optional-dependencies]
 dev = [
-    "black",
     "isort",
     "ruff",
     "pre-commit",
 ]
 test = [
-    "coverage",
     "pytest",
-    "pytest-cov",
 ]
 
 [build-system]
@@ -33,11 +30,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.black]
-line-length = 98
-target-version = ['py311']
-include = '\.pyi?$'
 
 [tool.isort]
 atomic = true
@@ -48,17 +40,28 @@ known_first_party = ["grayscalelib"]
 
 [tool.ruff]
 line-length = 98
+indent-width = 4
+target-version = "py311"
+include = ["pyproject.toml", "src/**/*.py"]
+
+[tool.ruff.lint]
+fixable = ["ALL"]
+dummy-variable-rgx = "^(_+)$"
 select = [
     "F",  # pyflakes
     "E",  # pycodestyle
     "B",  # bugbear
 ]
-src = ["src"]
-target-version = "py311"
+
 ignore = [
     "B008", # function calls in argument defaults
     "E741", # variables named I, O, or l
 ]
+
+[tool.ruff.format]
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = false
 
 [tool.pytest.ini_options]
 pythonpath = [
