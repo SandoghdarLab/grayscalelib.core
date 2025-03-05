@@ -4,10 +4,6 @@ from dataclasses import dataclass
 
 from typing import Callable, Self, TypeVar
 
-from itertools import product
-
-from math import prod
-
 import operator
 
 import numpy as np
@@ -143,7 +139,7 @@ class NumpyPixels(ConcretePixels):
         fdtype = np.float64 if dr.states > 2**12 else np.float32
         d1 = self.discretization.inverse
         d2 = other.discretization.inverse
-        # x = (d1.a * i + d1.b) * (d2.a * j  + d2.b)
+        # x = (d1.a * i + d1.b) * (d2.a * j + d2.b)
         # x = (d1.a * d2.a * i * j) + (d1.a * d2.b * i) + (d2.a * d1.b * j) + (d1.b * d2.b)
         # k = round( x * dr.a + dr.b)
         # k = round( (d1.a * d2.a * dr.a * i * j) + (d1.a * dr.a * d2.b * i) + (d2.a * dr.a * d1.b * j) + (d1.b * d2.b * dr.a) + dr.b )

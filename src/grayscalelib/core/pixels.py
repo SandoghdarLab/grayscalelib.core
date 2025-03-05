@@ -12,8 +12,6 @@ from os import PathLike
 
 from pathlib import Path
 
-from types import EllipsisType
-
 from typing import Callable, Generic, Protocol, Self, TypeVar, runtime_checkable
 
 from sys import float_info
@@ -304,9 +302,9 @@ class Pixels(Encodable):
         A textual representation of this container.
         """
         name = type(self).__name__
-        return f"{name}({self.data}, discretization={self.discretization})"
+        return f"{name}({self.data}, black={self.black}, white={self.white}, states={self.states})"
 
-    # Conversion from something to pixels.
+    # Conversion from raw files to pixels.
 
     @classmethod
     def from_raw_file(
@@ -315,54 +313,54 @@ class Pixels(Encodable):
             shape: tuple[int, ...] | int,
             *,
             dtype: npt.DTypeLike | None = None,
-            black: Real = 0,
-            white: Real  = 1,
-            states: int = _default_states) -> Pixels:
+            black: Real | None = None,
+            white: Real | None = None,
+            states: int | None = None) -> Pixels:
         # Ensure the path exists.
         path = canonicalize_path(path)
         if not path.exists():
             raise RuntimeError(f"The file {path} doesn't exist.")
+        if not path.is_file():
+            raise RuntimeError(f"Not a file: {path}.")
         # Ensure the supplied shape is valid.
         shape = canonicalize_shape(shape)
+        count = prod(shape)
         # Determine the raw file's element type.
         if dtype is None:
-            size = prod(shape)
             fbytes = path.stat().st_size
-            itemsize, mod = divmod(fbytes, size)
+            itemsize, mod = divmod(fbytes, count)
             if mod != 0:
                 raise RuntimeError(
-                    f"Raw file size {fbytes} is not divisible by the number of elements {size}."
+                    f"Raw file size {fbytes} is not divisible by the number of elements {count}."
                 )
             dtype = f"u{itemsize}"
         dtype = np.dtype(dtype)
         black_default, white_default, states_default = dtype_black_white_states(dtype)
-        discretization = Discretization((float(black), float(white)), (0, states-1))
-        initializer = RawFilePixelsInitializer(
-            path=path,
-            temp=False,
-            shape=shape,
-            discretization=discretization,
-            dtype=dtype
-        )
-        return RawFilePixels(initializer).encode_as(cls)
+        _black = black_default if black is None else black
+        _white = white_default if white is None else white
+        _states = states_default if states is None else states
+        # Create a suitable Pixels object.
+        data = np.fromfile(path, dtype, count).reshape(shape)
+        return cls(data, black=_black, white=_white, states=_states)
 
-    # Conversion from pixels to something else.
+    # Conversion from pixels to raw files.
 
-    def to_raw_file(
-            self,
-            path: str | PathLike[str] | None = None,
-            *,
-            overwrite=True,
-            temp: bool = False,
-    ) -> RawFilePixels:
-        raw_file = self.encode_as(RawFilePixels)
-        if path is not None:
-            raw_file.rename(path, overwrite=overwrite)
-        return raw_file
+    def to_raw_file(self, path: str | PathLike[str] | None = None, *, overwrite=True,) -> None:
+        path = canonicalize_path(path)
+        if path.exists():
+            if path.is_dir():
+                raise RuntimeError(f"Cannot overwrite existing directory {path}.")
+            if not path.is_file():
+                raise RuntimeError(f"Cannot overwrite non-file {path}.")
+            elif overwrite:
+                path.unlink()
+            else:
+                raise RuntimeError(f"The file {path} already exists.")
+        self.raw.tofile(path)
 
     # getitem
 
-    def __getitem__(self: Pixels, index: EllipsisType | int | slice | tuple[int | slice, ...]) -> Pixels:
+    def __getitem__(self: Pixels, index) -> Pixels:
         """
         Select a part of the supplied container.
         """
@@ -1098,90 +1096,6 @@ class ConcretePixelsInitializer(PixelsInitializer[CP]):
     def initialize(self, /, instance: CP):
         instance._shape = self.shape
         instance._discretization = self.discretization
-
-
-###############################################################################
-###
-### File Pixels
-
-class FilePixels(ConcretePixels):
-    """Pixels stored in a file.
-
-    The Pixels that are stored in a file don't reside in main memory, but
-    somewhere in the file system.  The file can either be temporary, in which
-    case it is removed once its corresponding class is no longer reachable, or
-    it can be persistent.  A persistent file can be used for storing pixels
-    across sessions, for archival, or for communicating it with others.
-
-    """
-    # When a temporary file object is deleted, a finalizer will also remove the
-    # actual file associated with it.  However, both the file's path and
-    # whether it is temporary can change over time, and the finalizer has to
-    # keep a reference to both without accidentally keeping the file object
-    # alive.  To achieve this, we store both properties in one-element lists,
-    # and pass those two lists to the finalizer.
-    _path_cell: list[Path]
-    _temp_cell: list[bool]
-
-    @property
-    def path(self) -> Path:
-        return self._path_cell[0]
-
-    @property
-    def is_temporary(self) -> bool:
-        return self._temp_cell[0]
-
-    def rename(
-            self,
-            path: str | PathLike[str],
-            *,
-            overwrite: bool = False,
-            temporary: bool = False) -> Self:
-        path = canonicalize_path(path)
-        if path.exists():
-            if path.is_dir():
-                raise RuntimeError(f"Cannot overwrite existing directory {path}.")
-            if not path.is_file():
-                raise RuntimeError(f"Cannot overwrite non-file {path}.")
-            elif overwrite:
-                path.unlink()
-            else:
-                raise RuntimeError(f"The file {path} already exists.")
-        self._path_cell[0] = self.path.rename(path)
-        self._temp_cell[0] = temporary
-        return self
-
-
-FP = TypeVar('FP', bound=FilePixels)
-
-
-@dataclass(frozen=True)
-class FilePixelsInitializer(ConcretePixelsInitializer[FP]):
-    path: str | PathLike[str]
-    temp: bool
-
-    def initialize(self, /, instance: FP):
-        super().initialize(instance)
-        abspath = Path(self.path).expanduser().resolve(strict=True)
-        instance._path_cell = [abspath]
-        instance._temp_cell = [self.temp]
-
-
-class RawFilePixels(FilePixels):
-    _dtype: npt.DTypeLike
-
-
-RP = TypeVar('RP', bound=RawFilePixels)
-
-
-@dataclass(frozen=True)
-class RawFilePixelsInitializer(FilePixelsInitializer[RP]):
-    """Turn an existing raw file into pixels."""
-    dtype: npt.DTypeLike
-
-    def initialize(self, /, instance: RP):
-        super().initialize(instance)
-        instance._dtype = self.dtype
 
 
 ###############################################################################

@@ -1,9 +1,9 @@
 import pytest
 import itertools
 import math
-import sys
+import tempfile
+import pathlib
 import numpy as np
-import numpy.typing as npt
 from itertools import chain, permutations, product
 from grayscalelib.core.discretization import Discretization
 from grayscalelib.core.pixels import Pixels, pixels_type, broadcast
@@ -83,6 +83,43 @@ def test_pixels_init(pixels_subclass):
         results = px.data
         for index in range(d + 1):
             assert abs(results[index] - values[index]) <= px.roundoff
+
+
+def test_pixels_to_raw_file(pixels_subclass):
+    shapes: list[tuple[int, ...]] = [(), (5,), (3, 7)]
+    for shape in shapes:
+        count = math.prod(shape)
+        data = np.linspace(0.0, 1.0, count)
+        for states in [1, 2**8-1, 2**8, 2**8+1, 2**16, 2**16+1]:
+            px = Pixels(data, states=states)
+            assert isinstance(px, pixels_subclass)
+            path = pathlib.Path(tempfile.mkdtemp()) / 'grayscalelib_core_test_pixels_to_raw_file'
+            px.to_raw_file(path)
+            expected = px.raw
+            result = np.fromfile(path, dtype=expected.dtype)
+            assert np.all(expected == result)
+
+
+def test_pixels_from_raw_file(pixels_subclass):
+    for black, white, dtype, states in [
+            (0, 2**8-1, np.uint8, 2**8),
+            (0, 2**16-1, np.uint16, 2**16),
+            (0, 2**32-1, np.uint32, 2**32),
+            (-(2**7), 2**7-1, np.int8, 2**8),
+            (-(2**15), 2**15-1, np.int16, 2**16),
+            (-(2**31), 2**31-1, np.int32, 2**32),
+            (0.0, 1.0, np.float32, 2**24),
+            (0.0, 1.0, np.float64, 2**53),
+            ]:
+        data = np.linspace(black, white, 128)
+        with tempfile.NamedTemporaryFile() as temp:
+            # Write the raw file.
+            data.astype(dtype).tofile(temp.name)
+            temp.flush()
+            # Read the raw file.
+            px = Pixels.from_raw_file(temp.name, data.shape, dtype=dtype, states=states)
+            assert isinstance(px, pixels_subclass)
+            assert np.allclose(px.data, data, rtol=0, atol=1)
 
 
 def test_pixels_getitem(pixels_subclass):
