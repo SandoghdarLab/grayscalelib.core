@@ -2,19 +2,24 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+
 class ContinuousInterval(NamedTuple):
     """The closed interval of floating-point numbers."""
+
     lo: float
     hi: float
 
 
 class DiscreteInterval(NamedTuple):
     """A closed interval of integers."""
+
     lo: int
     hi: int
 
-class Discretization():
+
+class Discretization:
     """A function of the form f(x) = round(a * max(lo, min(x, hi)) + b)."""
+
     _domain: ContinuousInterval
     _codomain: DiscreteInterval
     _a: float
@@ -22,12 +27,13 @@ class Discretization():
     _inverse: InverseDiscretization
 
     def __init__(
-            self,
-            domain: tuple[float, float],
-            codomain: tuple[int, int],
-            flip: bool = False,
-            *,
-            _inverse: InverseDiscretization | None = None):
+        self,
+        domain: tuple[float, float],
+        codomain: tuple[int, int],
+        flip: bool = False,
+        *,
+        _inverse: InverseDiscretization | None = None,
+    ):
         # Normalize the domain.
         if domain[1] < domain[0]:
             fhi, flo = domain
@@ -126,8 +132,9 @@ class Discretization():
         return (self.domain == other.domain) and (self.codomain == other.codomain)
 
 
-class InverseDiscretization():
+class InverseDiscretization:
     "A linear mapping from integers to floating-point values."
+
     _domain: DiscreteInterval
     _codomain: ContinuousInterval
     _a: float
@@ -135,12 +142,13 @@ class InverseDiscretization():
     _inverse: Discretization
 
     def __init__(
-            self,
-            domain: tuple[int, int],
-            codomain: tuple[float, float],
-            flip: bool = False,
-            *,
-            _inverse: Discretization | None = None):
+        self,
+        domain: tuple[int, int],
+        codomain: tuple[float, float],
+        flip: bool = False,
+        *,
+        _inverse: Discretization | None = None,
+    ):
         # Normalize the domain.
         if domain[1] < domain[0]:
             ihi, ilo = domain
@@ -230,3 +238,4 @@ class InverseDiscretization():
         return (self.domain == other.domain) and (self.codomain == other.codomain)
 
 
+boolean_discretization = Discretization((0.0, 1.0), (0, 1))

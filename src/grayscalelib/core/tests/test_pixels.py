@@ -1,12 +1,14 @@
-import pytest
 import itertools
 import math
-import tempfile
 import pathlib
-import numpy as np
+import tempfile
 from itertools import chain, permutations, product
+
+import numpy as np
+import pytest
+
 from grayscalelib.core.discretization import Discretization
-from grayscalelib.core.pixels import Pixels, pixels_type, broadcast
+from grayscalelib.core.pixels import Pixels, broadcast, pixels_type
 
 
 @pytest.fixture
@@ -70,7 +72,7 @@ def test_pixels_init(pixels_subclass):
     # Ensure proper discretization.
     for states in range(2, 257, 1):
         # Multiples of eps should have an exact representation.
-        d = (states - 1)
+        d = states - 1
         px = Pixels([n / d for n in range(d + 1)], states=states)
         assert px.eps == 1 / d
         assert isinstance(px, pixels_subclass)
@@ -90,10 +92,10 @@ def test_pixels_to_raw_file(pixels_subclass):
     for shape in shapes:
         count = math.prod(shape)
         data = np.linspace(0.0, 1.0, count)
-        for states in [1, 2**8-1, 2**8, 2**8+1, 2**16, 2**16+1]:
+        for states in [1, 2**8 - 1, 2**8, 2**8 + 1, 2**16, 2**16 + 1]:
             px = Pixels(data, states=states)
             assert isinstance(px, pixels_subclass)
-            path = pathlib.Path(tempfile.mkdtemp()) / 'grayscalelib_core_test_pixels_to_raw_file'
+            path = pathlib.Path(tempfile.mkdtemp()) / "grayscalelib_core_test_pixels_to_raw_file"
             px.to_raw_file(path)
             expected = px.raw
             result = np.fromfile(path, dtype=expected.dtype)
@@ -102,15 +104,15 @@ def test_pixels_to_raw_file(pixels_subclass):
 
 def test_pixels_from_raw_file(pixels_subclass):
     for black, white, dtype, states in [
-            (0, 2**8-1, np.uint8, 2**8),
-            (0, 2**16-1, np.uint16, 2**16),
-            (0, 2**32-1, np.uint32, 2**32),
-            (-(2**7), 2**7-1, np.int8, 2**8),
-            (-(2**15), 2**15-1, np.int16, 2**16),
-            (-(2**31), 2**31-1, np.int32, 2**32),
-            (0.0, 1.0, np.float32, 2**24),
-            (0.0, 1.0, np.float64, 2**53),
-            ]:
+        (0, 2**8 - 1, np.uint8, 2**8),
+        (0, 2**16 - 1, np.uint16, 2**16),
+        (0, 2**32 - 1, np.uint32, 2**32),
+        (-(2**7), 2**7 - 1, np.int8, 2**8),
+        (-(2**15), 2**15 - 1, np.int16, 2**16),
+        (-(2**31), 2**31 - 1, np.int32, 2**32),
+        (0.0, 1.0, np.float32, 2**24),
+        (0.0, 1.0, np.float64, 2**53),
+    ]:
         data = np.linspace(black, white, 128)
         with tempfile.NamedTemporaryFile() as temp:
             # Write the raw file.
@@ -150,7 +152,7 @@ def test_pixels_getitem(pixels_subclass):
         row = px[i]
         assert row.shape == (2,)
         for j in range(2):
-            expected = (i * 2 + j)
+            expected = i * 2 + j
             assert expected == row[j].raw[()]
             assert expected == px[i, j].raw[()]
 
@@ -159,7 +161,7 @@ def test_pixels_getitem(pixels_subclass):
         rank = len(shape)
         size = math.prod(shape)
         values = np.reshape(list(range(size)), shape)
-        px = Pixels(values, white=size-1, states=size)
+        px = Pixels(values, white=size - 1, states=size)
         assert isinstance(px, pixels_subclass)
         assert px[...].shape == shape
         # Index every individual element.
@@ -167,9 +169,9 @@ def test_pixels_getitem(pixels_subclass):
             assert values[index] == px[index].data[()]
         # Slicing.
         slices = [slice(None), slice(1, None), slice(None, -1), slice(1, -1, 2)]
-        for index in product(* [slices] * rank):
+        for index in product(*[slices] * rank):
             selection = px[index]
-            for slc, nold, nnew in zip(index, shape, selection.shape):
+            for slc, nold, nnew in zip(index, shape, selection.shape, strict=False):
                 assert len(range(*slc.indices(nold))) == nnew
 
 
@@ -202,14 +204,14 @@ def test_pixels_permute(pixels_subclass):
         rank = len(shape)
         size = math.prod(shape)
         values = np.reshape(list(range(size)), shape)
-        px = Pixels(values, white=size-1, states=size)
+        px = Pixels(values, white=size - 1, states=size)
         assert isinstance(px, pixels_subclass)
         assert px.permute().shape == shape
         for permutation in chain(*[permutations(range(k)) for k in range(rank)]):
             flipped1 = px.permute(*permutation).raw
             flipped2 = px.permute(permutation).raw
             for index in itertools.product(*[range(s) for s in shape]):
-                other = tuple(index[p] for p in permutation) + index[len(permutation):]
+                other = tuple(index[p] for p in permutation) + index[len(permutation) :]
                 assert values[index] == flipped1[other]
                 assert values[index] == flipped2[other]
 
@@ -219,7 +221,7 @@ def test_pixels_reencode(pixels_subclass):
     px = Pixels([0, 1], states=2)
     for n in range(1, 5):
         assert isinstance(px, pixels_subclass)
-        raw = px.reencode(states=n+1).raw
+        raw = px.reencode(states=n + 1).raw
         assert raw[0] == 0
         assert raw[1] == n
 
@@ -250,7 +252,7 @@ def test_pixels_reencode(pixels_subclass):
 
 
 def test_pixels_reshape(pixels_subclass):
-    pass # TODO
+    pass  # TODO
 
 
 def test_pixels_broadcast(pixels_subclass):
@@ -259,7 +261,7 @@ def test_pixels_broadcast(pixels_subclass):
         size = math.prod(shape)
         rank1 = len(shape)
         array1 = np.reshape(list(range(size)), shape)
-        px1 = Pixels(array1, white=size-1, states=size)
+        px1 = Pixels(array1, white=size - 1, states=size)
         assert isinstance(px1, pixels_subclass)
         for suffix in chain(*[permutations((0, 1, 2, 3), k) for k in range(4)]):
             px2 = px1.broadcast_to(shape + suffix)
@@ -269,9 +271,12 @@ def test_pixels_broadcast(pixels_subclass):
 
 
 def test_bool(pixels_subclass):
-    for alltrue, anytrue, allfalse in zip((Pixels(1), Pixels([1, 1]), Pixels([[1, 1], [1, 1]])),
-                                          (Pixels(1), Pixels([0, 1]), Pixels([[0, 0], [1, 0]])),
-                                          (Pixels(0), Pixels([0, 0]), Pixels([[0, 0], [0, 0]]))):
+    for alltrue, anytrue, allfalse in zip(
+        (Pixels(1), Pixels([1, 1]), Pixels([[1, 1], [1, 1]])),
+        (Pixels(1), Pixels([0, 1]), Pixels([[0, 0], [1, 0]])),
+        (Pixels(0), Pixels([0, 0]), Pixels([[0, 0], [0, 0]])),
+        strict=True,
+    ):
         assert isinstance(alltrue, pixels_subclass)
         assert isinstance(anytrue, pixels_subclass)
         assert isinstance(allfalse, pixels_subclass)
@@ -280,10 +285,10 @@ def test_bool(pixels_subclass):
         assert alltrue.any()
         assert anytrue.any()
         # not
-        assert (~ allfalse).all()
-        assert not (~ alltrue).all()
-        assert not (~ alltrue).any()
-        assert not (~ anytrue).all()
+        assert (~allfalse).all()
+        assert not (~alltrue).all()
+        assert not (~alltrue).any()
+        assert not (~anytrue).all()
         # and
         assert (alltrue & alltrue).all()
         assert (alltrue & alltrue).any()
@@ -333,16 +338,16 @@ def test_two_arg_fns(pixels_subclass):
             assert np.all(pos.data == p.data)
         # __add__
         for a, b in pairs:
-            result = (a + b)
-            assert np.allclose(a.data+b.data, result.data, rtol=0, atol=result.roundoff)
+            result = a + b
+            assert np.allclose(a.data + b.data, result.data, rtol=0, atol=result.roundoff)
         # __sub__
         for a, b in pairs:
-            result = (a - b)
-            assert np.allclose(a.data-b.data, result.data, rtol=0, atol=result.roundoff)
+            result = a - b
+            assert np.allclose(a.data - b.data, result.data, rtol=0, atol=result.roundoff)
         # __mul__
         for a, b in pairs:
-            result = (a * b)
-            assert np.allclose(a.data*b.data, result.data, rtol=0, atol=result.roundoff)
+            result = a * b
+            assert np.allclose(a.data * b.data, result.data, rtol=0, atol=result.roundoff)
         # __lt__, __gt__, __le__, __ge__, __eq__, __ne__
         for a, b in pairs:
             eps = b.eps if a.states == 1 else a.eps if b.states == 1 else min(a.eps, b.eps)
@@ -374,10 +379,14 @@ def test_rolling_sum(pixels_subclass):
     assert (rs5 == Pixels([2.5], white=5.0, states=21)).all()
     # 2D tests
     px = Pixels([[0, 1, 2], [3, 4, 5], [6, 7, 8]], white=8, states=9)
-    assert (px.rolling_sum((1, 1)) == Pixels([[0, 1, 2], [3, 4, 5], [6, 7, 8]], white=8, states=9)).all()
+    assert (
+        px.rolling_sum((1, 1)) == Pixels([[0, 1, 2], [3, 4, 5], [6, 7, 8]], white=8, states=9)
+    ).all()
     assert (px.rolling_sum((2, 1)) == Pixels([[3, 5, 7], [9, 11, 13]], white=16, states=17)).all()
     assert (px.rolling_sum((3, 1)) == Pixels([[9, 12, 15]], white=24, states=25)).all()
-    assert (px.rolling_sum((1, 2)) == Pixels([[1, 3], [7, 9], [13, 15]], white=16, states=17)).all()
+    assert (
+        px.rolling_sum((1, 2)) == Pixels([[1, 3], [7, 9], [13, 15]], white=16, states=17)
+    ).all()
     assert (px.rolling_sum((2, 2)) == Pixels([[8, 12], [20, 24]], white=32, states=33)).all()
     assert (px.rolling_sum((3, 2)) == Pixels([[21, 27]], white=48, states=49)).all()
     assert (px.rolling_sum((1, 3)) == Pixels([[3], [12], [21]], white=24, states=25)).all()

@@ -1,5 +1,6 @@
 from grayscalelib.core.discretization import Discretization
 
+
 def test_discretization():
     # Corner cases.
     d = Discretization((1.0, 1.0), (0, 0))
@@ -10,8 +11,8 @@ def test_discretization():
     tuples = [(0, 1), (0, 3), (1, 3), (-3, 0), (0, 255), (0, 256)]
     codomains = tuples + [(i2, i1) for (i1, i2) in tuples]
     domains = [(float(i1), float(i2)) for (i1, i2) in codomains]
-    for (i1, i2) in codomains:
-        for (f1, f2) in domains:
+    for i1, i2 in codomains:
+        for f1, f2 in domains:
             flip = (f2 < f1) ^ (i2 < i1)
             # Forward
             d = Discretization((f1, f2), (i1, i2))

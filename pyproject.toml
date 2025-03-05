@@ -54,8 +54,8 @@ select = [
 ]
 
 ignore = [
-    "B008", # function calls in argument defaults
-    "E741", # variables named I, O, or l
+    "B008",  # function calls in argument defaults
+    "E741",  # variables named I, O, or l
 ]
 
 [tool.ruff.format]

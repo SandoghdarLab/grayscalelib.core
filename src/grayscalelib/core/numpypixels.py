@@ -1,21 +1,22 @@
 from __future__ import annotations
 
+import operator
 from dataclasses import dataclass
-
 from typing import Callable, Self, TypeVar
 
-import operator
-
 import numpy as np
-
 import numpy.typing as npt
-
 from numpy.lib.stride_tricks import sliding_window_view
 
-from grayscalelib.core.pixels import Discretization, Initializer, ConcretePixels, ConcretePixelsInitializer, register_default_pixels_type, boolean_discretization
+from grayscalelib.core.concretepixels import ConcretePixels, ConcretePixelsInitializer
+from grayscalelib.core.discretization import boolean_discretization
+from grayscalelib.core.pixels import (
+    Discretization,
+    Initializer,
+    register_default_pixels_type,
+)
 
-
-T = TypeVar('T')
+T = TypeVar("T")
 
 uint = np.uint8 | np.uint16 | np.uint32 | np.uint64
 
@@ -28,13 +29,12 @@ class NumpyPixels(ConcretePixels):
     use-cases in mind, the main goals of this code are correctness, simplicity,
     and having Numpy as the only dependency.
     """
+
     _raw: npt.NDArray[uint]
 
     @classmethod
     def _initializer_(
-            cls: type[T],
-            data: npt.ArrayLike,
-            discretization: Discretization
+        cls: type[T], data: npt.ArrayLike, discretization: Discretization
     ) -> Initializer[T]:
         dtype = integer_dtype(*discretization.codomain)
         raw = np.vectorize(discretization, otypes=[dtype])(data)
@@ -42,7 +42,7 @@ class NumpyPixels(ConcretePixels):
 
     @classmethod
     def __encoding_priority__(cls):
-        return 0 # Any other implementation should take precedence.
+        return 0  # Any other implementation should take precedence.
 
     @property
     def data(self) -> npt.NDArray[np.float64]:
@@ -66,7 +66,7 @@ class NumpyPixels(ConcretePixels):
 
     def _reencode_(self, black: float, white: float, states: int) -> Self:
         i2f = self.discretization.inverse
-        f2i = Discretization((black, white), (0, max(0, states-1)))
+        f2i = Discretization((black, white), (0, max(0, states - 1)))
         a = i2f.a * f2i.a
         b = i2f.b * f2i.a + f2i.b
         i1, i2 = round(i2f.domain.lo * a + b), round(i2f.domain.hi * a + b)
@@ -130,7 +130,7 @@ class NumpyPixels(ConcretePixels):
         # k = round( factor1 * i + factor2 * j + offset )
         factor1 = fdtype(d1.a * dr.a)
         factor2 = fdtype(d2.a * dr.a)
-        offset  = fdtype((d1.b + d2.b) * dr.a + dr.b)
+        offset = fdtype((d1.b + d2.b) * dr.a + dr.b)
         raw = np.round(factor1 * self._raw + factor2 * other._raw + offset).astype(idtype)
         return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
 
@@ -142,26 +142,21 @@ class NumpyPixels(ConcretePixels):
         # x = (d1.a * i + d1.b) * (d2.a * j + d2.b)
         # x = (d1.a * d2.a * i * j) + (d1.a * d2.b * i) + (d2.a * d1.b * j) + (d1.b * d2.b)
         # k = round( x * dr.a + dr.b)
-        # k = round( (d1.a * d2.a * dr.a * i * j) + (d1.a * dr.a * d2.b * i) + (d2.a * dr.a * d1.b * j) + (d1.b * d2.b * dr.a) + dr.b )
+        # k = round( (d1.a * d2.a * dr.a * i * j)
+        #          + (d1.a * dr.a * d2.b * i)
+        #          + (d2.a * dr.a * d1.b * j)
+        #          + (d1.b * d2.b * dr.a)
+        #          + dr.b )
         # k = round( (factor1 * i * j) + (factor2 * i) + (factor3 * j) + offset)
         factor1 = fdtype(d1.a * d2.a * dr.a)
         factor2 = fdtype(d1.a * dr.a * d2.b)
         factor3 = fdtype(d2.a * dr.a * d1.b)
-        offset  = fdtype((d1.b * d2.b * dr.a) + dr.b)
+        offset = fdtype((d1.b * d2.b * dr.a) + dr.b)
         term1 = (factor1 * self._raw) * other._raw
         term2 = factor2 * self._raw
         term3 = factor3 * other._raw
         raw = np.round(term1 + term2 + term3 + offset).astype(idtype)
         return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
-
-    def _pow_(self, other: float) -> Self:
-        pass # TODO
-
-    def _truediv_(self, other: Self) -> Self:
-        pass # TODO
-
-    def _mod_(self, other: Self) -> Self:
-        pass # TODO
 
     def _cmp_(self, other: Self, op: Callable[[float, float], bool]) -> Self:
         d1 = self.discretization.inverse
@@ -204,14 +199,14 @@ class NumpyPixels(ConcretePixels):
         rank = self.rank
         dtype = integer_dtype(dr.codomain.lo, dr.codomain.hi)
         view = sliding_window_view(self._raw, window_sizes)
-        raw = view.sum(tuple(range(rank, rank+len(window_sizes))), dtype=dtype)
+        raw = view.sum(tuple(range(rank, rank + len(window_sizes))), dtype=dtype)
         return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
 
 
 register_default_pixels_type(NumpyPixels)
 
 
-NP = TypeVar('NP', bound=NumpyPixels)
+NP = TypeVar("NP", bound=NumpyPixels)
 
 
 @dataclass(frozen=True)

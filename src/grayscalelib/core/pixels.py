@@ -1,31 +1,20 @@
 from __future__ import annotations
 
+import operator
 from abc import abstractmethod
-
 from contextlib import contextmanager
-
 from dataclasses import dataclass
-
 from math import prod
-
 from os import PathLike
-
 from pathlib import Path
-
+from sys import float_info
 from typing import Callable, Generic, Protocol, Self, TypeVar, runtime_checkable
 
-from sys import float_info
-
-import operator
-
 import numpy as np
-
 import numpy.typing as npt
 
-from grayscalelib.core.discretization import Discretization
-
-from grayscalelib.core.encodable import choose_encoding, Encodable
-
+from grayscalelib.core.discretization import Discretization, boolean_discretization
+from grayscalelib.core.encodable import Encodable, choose_encoding
 
 ###############################################################################
 ###
@@ -37,8 +26,6 @@ _enforced_pixels_type: type[Pixels] | None = None
 _default_pixels_type: type[Pixels] | None = None
 
 _default_states: int = 256
-
-boolean_discretization = Discretization((0.0, 1.0), (0, 1))
 
 uint = np.uint8 | np.uint16 | np.uint32 | np.uint64
 
@@ -111,18 +98,12 @@ def default_pixels_states(states: int):
         _default_states = previous
 
 
-###############################################################################
-###
-### The Pixels Class
-
-
 @runtime_checkable
 class Real(Protocol):
-    def __float__(self) -> float:
-        ...
+    def __float__(self) -> float: ...
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -137,6 +118,12 @@ class Initializer(Generic[T]):
     def initialize(self, /, instance: T) -> None:
         raise MissingMethod(instance, "initializing")
 
+
+###############################################################################
+###
+### The Pixels Class
+
+
 class Pixels(Encodable):
     """A container for non-negative values with uniform spacing.
 
@@ -146,26 +133,23 @@ class Pixels(Encodable):
     as a discrete number of equidistant points.
     """
 
-    def __new__(
-            cls,
-            data: npt.ArrayLike | Initializer[T],
-            **kwargs) -> Pixels:
+    def __new__(cls, data: npt.ArrayLike | Initializer[T], **kwargs) -> Pixels:
         # If someone attempts to instantiate the abstract pixels base class,
         # instantiate an appropriate subclass instead.
         if cls is Pixels:
             newcls = encoding(cls)
-            assert newcls != cls # Avoid infinite recursion
+            assert newcls != cls  # Avoid infinite recursion
             return newcls.__new__(newcls, data, **kwargs)
         # Otherwise, use the default __new__ method.
         return super().__new__(cls)
 
     def __init__(
-            self,
-            data: npt.ArrayLike | Initializer[Self],
-            *,
-            black: Real = 0,
-            white: Real = 1,
-            states: int = _default_states,
+        self,
+        data: npt.ArrayLike | Initializer[Self],
+        *,
+        black: Real = 0,
+        white: Real = 1,
+        states: int = _default_states,
     ):
         """
         Initialize a Pixels container, based on the supplied arguments.
@@ -189,15 +173,15 @@ class Pixels(Encodable):
         if isinstance(data, Initializer):
             initializer = data
         else:
-            discretization = Discretization((float(black), float(white)), (0, max(states, 1)-1))
+            discretization = Discretization((float(black), float(white)), (0, max(states, 1) - 1))
             initializer = self._initializer_(data, discretization)
         initializer.initialize(self)
 
     @classmethod
     def _initializer_(
-            cls: type[T],
-            data: npt.ArrayLike,
-            discretization: Discretization,
+        cls: type[T],
+        data: npt.ArrayLike,
+        discretization: Discretization,
     ) -> Initializer[T]:
         """Create a suitable pixels initializer.
 
@@ -302,20 +286,23 @@ class Pixels(Encodable):
         A textual representation of this container.
         """
         name = type(self).__name__
-        return f"{name}({self.data}, black={self.black}, white={self.white}, states={self.states})"
+        return (
+            f"{name}({self.data}, black={self.black}, white={self.white}, states={self.states})"
+        )
 
     # Conversion from raw files to pixels.
 
     @classmethod
     def from_raw_file(
-            cls,
-            path: str | PathLike[str],
-            shape: tuple[int, ...] | int,
-            *,
-            dtype: npt.DTypeLike | None = None,
-            black: Real | None = None,
-            white: Real | None = None,
-            states: int | None = None) -> Pixels:
+        cls,
+        path: str | PathLike[str],
+        shape: tuple[int, ...] | int,
+        *,
+        dtype: npt.DTypeLike | None = None,
+        black: Real | None = None,
+        white: Real | None = None,
+        states: int | None = None,
+    ) -> Pixels:
         # Ensure the path exists.
         path = canonicalize_path(path)
         if not path.exists():
@@ -345,7 +332,12 @@ class Pixels(Encodable):
 
     # Conversion from pixels to raw files.
 
-    def to_raw_file(self, path: str | PathLike[str] | None = None, *, overwrite=True,) -> None:
+    def to_raw_file(
+        self,
+        path: str | PathLike[str] | None = None,
+        *,
+        overwrite=True,
+    ) -> None:
         path = canonicalize_path(path)
         if path.exists():
             if path.is_dir():
@@ -403,7 +395,7 @@ class Pixels(Encodable):
         assert len(new_shape) == rank
         for i, p in enumerate(permutation):
             assert new_shape[i] == old_shape[p]
-        for s1, s2 in zip(old_shape[nperm:], new_shape[nperm:]):
+        for s1, s2 in zip(old_shape[nperm:], new_shape[nperm:], strict=False):
             assert s1 == s2
         return result
 
@@ -427,12 +419,13 @@ class Pixels(Encodable):
     # reencode
 
     def reencode(
-            self,
-            *,
-            cls: type[Pixels] | None = None,
-            black: Real | None = None,
-            white: Real | None = None,
-            states: int | None = None) -> Pixels:
+        self,
+        *,
+        cls: type[Pixels] | None = None,
+        black: Real | None = None,
+        white: Real | None = None,
+        states: int | None = None,
+    ) -> Pixels:
         """Replace each pixel with the closest value in the partitioning of
         [black, white] into the supplied number of equidistant states.
 
@@ -542,7 +535,6 @@ class Pixels(Encodable):
 
     def _all_(self) -> bool:
         raise MissingMethod(self, "testing for all non-black")
-
 
     # and
 
@@ -708,7 +700,7 @@ class Pixels(Encodable):
             dr = Discretization((black, white), ad.codomain, ad.flip)
             return a.rediscretize(dr)
         states = round((white - black) / min(a.eps, b.eps)) + 1
-        dr = Discretization((black, white), (0, states-1))
+        dr = Discretization((black, white), (0, states - 1))
         # Compute the result.
         result = a._add_(b, dr)
         assert result.shape == a.shape
@@ -746,7 +738,7 @@ class Pixels(Encodable):
         # Compute the resulting discretization
         x1, x2 = a.black, a.white
         y1, y2 = b.black, b.white
-        f1, f2, f3, f4 = x1*y1, x1*y2, x2*y1, x2*y2
+        f1, f2, f3, f4 = x1 * y1, x1 * y2, x2 * y1, x2 * y2
         black = min(f1, f2, f3, f4)
         white = max(f1, f2, f3, f4)
         if black == white:
@@ -762,7 +754,7 @@ class Pixels(Encodable):
             dr = Discretization((black, white), ad.codomain, flip)
             return a.rediscretize(dr)
         states = a.states * b.states
-        dr = Discretization((black, white), (0, states-1))
+        dr = Discretization((black, white), (0, states - 1))
         # Compute the result.
         result = a._mul_(b, dr)
         assert result.shape == a.shape
@@ -786,7 +778,7 @@ class Pixels(Encodable):
         px1, px2 = broadcast(self, exponent)
         # Compute the resulting discretization
         result = px1._pow_(px2)
-        return result # TODO
+        return result  # TODO
 
     def _pow_(self: Self, other: Self) -> Self:
         _ = other
@@ -800,7 +792,7 @@ class Pixels(Encodable):
         """
         a, b = broadcast(self, other)
         result = a._truediv_(b)
-        return result # TODO
+        return result  # TODO
 
     def _truediv_(self: Self, other: Self) -> Self:
         _ = other
@@ -814,7 +806,7 @@ class Pixels(Encodable):
         """
         a, b = broadcast(self, other)
         result = a._mod_(b)
-        return result # TODO
+        return result  # TODO
 
     def __rmod__(self, other) -> Pixels:
         b, a = pixelize(self, other)
@@ -832,7 +824,7 @@ class Pixels(Encodable):
         """
         a, b = broadcast(self, other)
         result = a._floordiv_(b)
-        return result # TODO
+        return result  # TODO
 
     def __rfloordiv__(self, other) -> Pixels:
         b, a = pixelize(self, other)
@@ -920,7 +912,7 @@ class Pixels(Encodable):
         assert result.shape == a.shape
         return result
 
-    def __eq__(self, other) -> Pixels: # type: ignore
+    def __eq__(self, other) -> Pixels:  # type: ignore
         """
         One wherever the left value is equal to the right, zero otherwise.
         """
@@ -939,7 +931,7 @@ class Pixels(Encodable):
         assert result.shape == a.shape
         return result
 
-    def __ne__(self, other) -> Pixels: # type: ignore
+    def __ne__(self, other) -> Pixels:  # type: ignore
         """
         One wherever the left value differs from the right, zero otherwise.
         """
@@ -958,9 +950,7 @@ class Pixels(Encodable):
         assert result.shape == a.shape
         return result
 
-    def _cmp_(self: Self,
-              other: Self,
-              op: Callable[[float, float], bool]) -> Self:
+    def _cmp_(self: Self, other: Self, op: Callable[[float, float], bool]) -> Self:
         """Returns Pixels that are one where the supplied comparison holds, and
         zero otherwise.
 
@@ -972,13 +962,15 @@ class Pixels(Encodable):
 
     # sum
 
-    def sum(self, axis: int | tuple[int, ...]=0, keepdims: bool=False) -> Pixels:
+    def sum(self, axis: int | tuple[int, ...] = 0, keepdims: bool = False) -> Pixels:
         """
         The sum of all values along the specified axis or axes.
         """
         rank = self.rank
         axes = canonicalize_axes(axis, rank)
-        window_sizes = tuple((size if axis in axes else 1) for axis, size in enumerate(self.shape))
+        window_sizes = tuple(
+            (size if axis in axes else 1) for axis, size in enumerate(self.shape)
+        )
         result = self.rolling_sum(window_sizes)
         if keepdims:
             return result
@@ -994,11 +986,15 @@ class Pixels(Encodable):
         amount = prod(window_sizes)
         px = self.encode_as(encoding(type(self)))
         dself = px.discretization
-        dr = Discretization((dself.domain.lo * amount, dself.domain.hi * amount),
-                            (dself.codomain.lo * amount, dself.codomain.hi * amount),
-                            dself.flip)
+        dr = Discretization(
+            (dself.domain.lo * amount, dself.domain.hi * amount),
+            (dself.codomain.lo * amount, dself.codomain.hi * amount),
+            dself.flip,
+        )
         result = px._rolling_sum_(window_sizes, dr)
-        assert result.shape == tuple((s - w + 1) for s, w in zip(self.shape, window_sizes))
+        assert result.shape == tuple(
+            (s - w + 1) for s, w in zip(self.shape, window_sizes, strict=False)
+        )
         assert result.discretization == dr
         return result
 
@@ -1008,13 +1004,15 @@ class Pixels(Encodable):
 
     # average
 
-    def average(self, axis: int | tuple[int, ...]=0, keepdims: bool=False) -> Pixels:
+    def average(self, axis: int | tuple[int, ...] = 0, keepdims: bool = False) -> Pixels:
         """
         The average of all values along the specified axis or axes.
         """
         rank = self.rank
         axes = canonicalize_axes(axis, rank)
-        window_sizes = tuple((size if axis in axes else 1) for axis, size in enumerate(self.shape))
+        window_sizes = tuple(
+            (size if axis in axes else 1) for axis, size in enumerate(self.shape)
+        )
         result = self.rolling_average(window_sizes)
         if keepdims:
             return result
@@ -1032,13 +1030,15 @@ class Pixels(Encodable):
 
     # median
 
-    def median(self, axis: int | tuple[int, ...]=0, keepdims: bool=False) -> Pixels:
+    def median(self, axis: int | tuple[int, ...] = 0, keepdims: bool = False) -> Pixels:
         """
         The median of all values along the specified axis or axes.
         """
         rank = self.rank
         axes = canonicalize_axes(axis, rank)
-        window_sizes = tuple((size if axis in axes else 1) for axis, size in enumerate(self.shape))
+        window_sizes = tuple(
+            (size if axis in axes else 1) for axis, size in enumerate(self.shape)
+        )
         result = self.rolling_median(window_sizes)
         if keepdims:
             return result
@@ -1050,7 +1050,9 @@ class Pixels(Encodable):
         window_sizes = canonicalize_window_sizes(window_size, self.shape)
         cls = encoding(type(self))
         result = self.encode_as(cls)._rolling_median_(window_sizes)
-        assert result.shape == tuple((s - w + 1) for s, w in zip(self.shape, window_sizes))
+        assert result.shape == tuple(
+            (s - w + 1) for s, w in zip(self.shape, window_sizes, strict=False)
+        )
         return result
 
     def _rolling_median_(self, window_sizes: tuple[int, ...]) -> Self:
@@ -1060,42 +1062,12 @@ class Pixels(Encodable):
     # TODO new methods: variance, convolve, fft
 
 
-P = TypeVar('P', bound=Pixels)
+P = TypeVar("P", bound=Pixels)
 
 
 @dataclass(frozen=True)
 class PixelsInitializer(Initializer[P]):
     pass
-
-
-###############################################################################
-###
-### Concrete Pixels
-
-class ConcretePixels(Pixels):
-    _shape: tuple[int, ...]
-    _discretization: Discretization
-
-    @property
-    def shape(self) -> tuple[int, ...]:
-        return self._shape
-
-    @property
-    def discretization(self) -> Discretization:
-        return self._discretization
-
-
-CP = TypeVar('CP', bound=ConcretePixels)
-
-
-@dataclass(frozen=True)
-class ConcretePixelsInitializer(PixelsInitializer[CP]):
-    shape: tuple[int, ...]
-    discretization: Discretization
-
-    def initialize(self, /, instance: CP):
-        instance._shape = self.shape
-        instance._discretization = self.discretization
 
 
 ###############################################################################
@@ -1141,7 +1113,7 @@ def canonicalize_shape(shape) -> tuple[int, ...]:
 
 def canonicalize_index(index, shape: tuple) -> tuple[int | slice, ...]:
     # Step 1 - Convert the index into a tuple.
-    ituple : tuple
+    ituple: tuple
     if index == ...:
         ituple = tuple(slice(None) for _ in shape)
     elif isinstance(index, int) or isinstance(index, slice):
@@ -1158,7 +1130,7 @@ def canonicalize_index(index, shape: tuple) -> tuple[int | slice, ...]:
     elif ni > ns:
         raise ValueError(f"Too many indices for shape {shape}.")
     # Step 3 - Ensure that all entries are well formed.
-    for entry, size in zip(ituple, shape):
+    for entry, size in zip(ituple, shape, strict=False):
         if isinstance(entry, int):
             if not (-size <= entry < size):
                 raise IndexError(f"Index {entry} out of range for axis with size {size}.")
@@ -1171,9 +1143,7 @@ def canonicalize_index(index, shape: tuple) -> tuple[int | slice, ...]:
     return ituple
 
 
-def canonicalize_axes(
-        axis: int | tuple[int, ...],
-        rank: int) -> tuple[int, ...]:
+def canonicalize_axes(axis: int | tuple[int, ...], rank: int) -> tuple[int, ...]:
     assert 0 <= rank
     if isinstance(axis, int):
         axes = (axis,)
@@ -1190,19 +1160,19 @@ def canonicalize_axes(
 
 
 def canonicalize_window_sizes(
-        window_size: int | tuple[int, ...],
-        shape: tuple[int, ...]) -> tuple[int, ...]:
+    window_size: int | tuple[int, ...], shape: tuple[int, ...]
+) -> tuple[int, ...]:
     rank = len(shape)
     if isinstance(window_size, int):
-        window_sizes = (window_size,) + (1,) * max(0, rank-1)
+        window_sizes = (window_size,) + (1,) * max(0, rank - 1)
     elif isinstance(window_size, tuple):
         n = len(window_size)
-        window_sizes = window_size + (1,) * max(0, rank-n)
+        window_sizes = window_size + (1,) * max(0, rank - n)
     else:
         raise TypeError(f"Invalid window size specifier {window_size}.")
     if len(window_sizes) > rank:
         raise ValueError(f"Too many window sizes for data of rank {rank}.")
-    for ws, size in zip(window_sizes, shape):
+    for ws, size in zip(window_sizes, shape, strict=False):
         if (not isinstance(ws, int)) or ws < 1:
             raise ValueError(f"Invalid window size {ws}.")
         if ws > size:
@@ -1277,11 +1247,11 @@ def dtype_black_white_states(dtype: npt.DTypeLike) -> tuple[Real, Real, int]:
         return (0.0, 1.0, 2**53)
     if dtype == np.float32:
         return (0.0, 1.0, 2**24)
-    elif dtype.kind == 'u':
+    elif dtype.kind == "u":
         nbits = dtype.itemsize * 8
-        return (0, 2**nbits-1, 2**nbits)
-    elif dtype.kind == 'i':
+        return (0, 2**nbits - 1, 2**nbits)
+    elif dtype.kind == "i":
         nbits = dtype.itemsize * 8
-        return (-(2**(nbits-1)), (2**(nbits-1))-1, 2**nbits)
+        return (-(2 ** (nbits - 1)), (2 ** (nbits - 1)) - 1, 2**nbits)
     else:
         raise TypeError(f"Cannot convert {dtype} objects to pixels values.")
