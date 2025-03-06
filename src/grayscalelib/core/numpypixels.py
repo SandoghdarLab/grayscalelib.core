@@ -158,6 +158,20 @@ class NumpyPixels(ConcretePixels):
         raw = np.round(term1 + term2 + term3 + offset).astype(idtype)
         return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
 
+    def _truediv_(self, other: Self, dr: Discretization, nan: float) -> Self:
+        idtype = integer_dtype(dr.codomain.lo, dr.codomain.hi)
+        fdtype = np.float64 if dr.states > 2**12 else np.float32
+        d1 = self.discretization.inverse
+        d2 = other.discretization.inverse
+        numerator = fdtype(d1.a) * self._raw + fdtype(d1.b)
+        denominator = fdtype(d2.a) * other._raw + fdtype(d2.b)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            values = np.nan_to_num(numerator / denominator, nan=nan)
+        # Clip to remove infinities.
+        values = np.clip(values, dr.domain.lo, dr.domain.hi)
+        raw = np.round(values * fdtype(dr.a) + fdtype(dr.b)).astype(idtype)
+        return type(self)(NumpyPixelsInitializer(raw.shape, dr, raw))
+
     def _cmp_(self, other: Self, op: Callable[[float, float], bool]) -> Self:
         d1 = self.discretization.inverse
         d2 = other.discretization.inverse

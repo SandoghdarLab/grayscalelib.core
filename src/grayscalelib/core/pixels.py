@@ -771,17 +771,19 @@ class Pixels(Encodable):
 
     # pow
 
-    def __pow__(self, exponent) -> Pixels:
+    def __pow__(self, exponent: Real) -> Pixels:
         """
         Raise each value to the specified power.
         """
-        px1, px2 = broadcast(self, exponent)
+        cls = encoding(type(self))
+        base = self.encode_as(cls)
         # Compute the resulting discretization
-        result = px1._pow_(px2)
-        return result  # TODO
+        result = base._pow_(float(exponent))
+        assert result.shape == base.shape
+        return result
 
-    def _pow_(self: Self, other: Self) -> Self:
-        _ = other
+    def _pow_(self, exponent: float) -> Self:
+        _ = exponent
         raise MissingMethod(self, "exponentiating")
 
     # truediv
@@ -791,11 +793,46 @@ class Pixels(Encodable):
         Divide the values of the two containers.
         """
         a, b = broadcast(self, other)
-        result = a._truediv_(b)
-        return result  # TODO
+        # Handle the special case where b has only a single state.
+        if b.states == 1:
+            if b.black == 0:
+                value = (self.white + self.black) / 2
+                return type(self)(value, black=value, white=value, states=1)
+            else:
+                return a * (1 / b.black)
+        # Derive the interval boundaries of 1/b, while excluding any values
+        # that are within (-b.eps, +b.eps) so that we avoid infinities.
+        if 0 <= b.black:
+            binv_hi = 1 / max(+b.eps, b.black)
+            binv_lo = 1 / max(+b.eps, b.white)
+        elif b.white <= 0:
+            binv_lo = 1 / min(-b.eps, b.white)
+            binv_hi = 1 / min(-b.eps, b.black)
+        else:
+            binv_lo = 1 / -b.eps
+            binv_hi = 1 / +b.eps
+        assert binv_lo <= binv_hi
+        # Determine the boundaries of a * [binv_lo, binv_hi].
+        x1, x2 = a.black, a.white
+        y1, y2 = binv_lo, binv_hi
+        f1, f2, f3, f4 = x1 * y1, x1 * y2, x2 * y1, x2 * y2
+        black = min(f1, f2, f3, f4)
+        white = max(f1, f2, f3, f4)
+        # Determine the resulting discretization.
+        states = a.states * b.states
+        dr = Discretization((black, white), (0, states - 1))
+        # Chose the value to assign to 0 / 0
+        nan = (a.black + a.white) / 2
+        result = a._truediv_(b, dr, nan)
+        assert result.shape == a.shape
+        return result
 
-    def _truediv_(self: Self, other: Self) -> Self:
-        _ = other
+    def __rtruediv__(self, other):
+        b, a = pixelize(self, other)
+        return a.__truediv__(b)
+
+    def _truediv_(self: Self, other: Self, dr: Discretization, nan: float) -> Self:
+        _, _ = other, dr
         raise MissingMethod(self, "dividing")
 
     # mod
