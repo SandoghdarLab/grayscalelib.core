@@ -4,7 +4,7 @@ import operator
 from abc import abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
-from math import prod
+from math import floor, prod
 from os import PathLike
 from pathlib import Path
 from sys import float_info
@@ -822,7 +822,8 @@ class Pixels(Encodable):
         states = a.states * b.states
         dr = Discretization((black, white), (0, states - 1))
         # Chose the value to assign to 0 / 0
-        nan = (a.black + a.white) / 2
+        nan = (black + white) / 2
+        # Perform the actual division
         result = a._truediv_(b, dr, nan)
         assert result.shape == a.shape
         return result
@@ -832,7 +833,7 @@ class Pixels(Encodable):
         return a.__truediv__(b)
 
     def _truediv_(self: Self, other: Self, dr: Discretization, nan: float) -> Self:
-        _, _ = other, dr
+        _, _, _ = other, dr, nan
         raise MissingMethod(self, "dividing")
 
     # mod
@@ -860,16 +861,44 @@ class Pixels(Encodable):
         Divide the values of the two containers and round the result down to the next integer.
         """
         a, b = broadcast(self, other)
-        result = a._floordiv_(b)
-        return result  # TODO
+        # Handle the special case where b has only a single state.
+        if b.states == 1 and b.black == 0:
+            value = (self.white + self.black) // 2
+            return type(self)(value, black=value, white=value, states=1)
+        # Derive the interval boundaries of 1/b, while excluding any values
+        # that are within (-b.eps, +b.eps) so that we avoid infinities.
+        if 0 <= b.black:
+            binv_hi = 1 / max(+b.eps, b.black)
+            binv_lo = 1 / max(+b.eps, b.white)
+        elif b.white <= 0:
+            binv_lo = 1 / min(-b.eps, b.white)
+            binv_hi = 1 / min(-b.eps, b.black)
+        else:
+            binv_lo = 1 / -b.eps
+            binv_hi = 1 / +b.eps
+        assert binv_lo <= binv_hi
+        # Determine the boundaries of a * [binv_lo, binv_hi].
+        x1, x2 = a.black, a.white
+        y1, y2 = binv_lo, binv_hi
+        f1, f2, f3, f4 = x1 * y1, x1 * y2, x2 * y1, x2 * y2
+        black = floor(min(f1, f2, f3, f4))
+        white = floor(max(f1, f2, f3, f4))
+        print(f"{binv_lo=} {binv_hi=} {x1=} {x2=} {y1=} {y2=} {black=} {white=}")
+        # Determine the intermediate discretization and the resulting discretization.
+        states = int(white - black) + 1
+        delta = 0.5
+        di = Discretization((black + delta, white + delta), (0, states - 1))
+        dr = Discretization((black, white), (0, states - 1))
+        # Chose the value to assign to 0 / 0
+        nan = (black + white) / 2 + delta
+        # Perform the actual division
+        result = a._truediv_(b, di, nan).rediscretize(dr)
+        assert result.shape == a.shape
+        return result
 
     def __rfloordiv__(self, other) -> Pixels:
         b, a = pixelize(self, other)
         return a.__floordiv__(b)
-
-    def _floordiv_(self: Self, other: Self) -> Self:
-        _ = other
-        raise MissingMethod(self, "floor-dividing")
 
     # comparisons
 

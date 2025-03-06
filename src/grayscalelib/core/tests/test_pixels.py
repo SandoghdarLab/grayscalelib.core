@@ -348,17 +348,30 @@ def test_two_arg_fns(pixels_subclass):
         for a, b in pairs:
             result = a * b
             assert np.allclose(a.data * b.data, result.data, rtol=0, atol=result.roundoff)
-        # __div__
+        # __truediv__
         for a, b in pairs:
             ignore = b.data == 0
             px = a / b
             with np.errstate(divide="ignore", invalid="ignore"):
-                nan = (a.black + a.white) / 2
+                nan = (px.black + px.white) / 2
                 val = np.nan_to_num(a.data / b.data, nan=nan)
                 val = np.clip(val, px.black, px.white)
             expected = np.where(ignore, 0, val)
             result = np.where(ignore, 0, px.data)
-            assert np.allclose(expected, result.data, rtol=0, atol=px.roundoff * 2)
+            assert np.allclose(expected, result, rtol=0, atol=px.roundoff * 2)
+        # __floordiv__
+        for a, b in pairs:
+            ignore = b.data == 0
+            px = a // b
+            dr = px.discretization
+            assert dr.states == 1 or abs(dr.a) == 1
+            with np.errstate(divide="ignore", invalid="ignore"):
+                nan = (px.black + px.white) / 2
+                val = np.nan_to_num(a.data // b.data, nan=nan)
+                val = np.clip(val, px.black, px.white)
+            expected = np.where(ignore, 0, val)
+            result = np.where(ignore, 0, px.data)
+            assert np.allclose(expected, result, rtol=0, atol=1)
         # __lt__, __gt__, __le__, __ge__, __eq__, __ne__
         for a, b in pairs:
             eps = b.eps if a.states == 1 else a.eps if b.states == 1 else min(a.eps, b.eps)
