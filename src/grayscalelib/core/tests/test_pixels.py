@@ -317,14 +317,22 @@ def test_bool(pixels_subclass):
     assert not Pixels([[[0.5, 0]]], states=2).any()
 
 
-# def test_shifts(pixels_subclass):
-#     px = Pixels(1)
-#     assert isinstance(px, pixels_subclass)
-#     for shift in range(30):
-#         assert (px << shift).raw[()] == 1
-#         assert (px >> shift).raw[()] == 1
-#         assert ((px >> shift) << shift).raw[()] == 1
-#         assert ((px << shift) >> shift).raw[()] == 1
+def test_shifts(pixels_subclass):
+    px = Pixels(1)
+    assert isinstance(px, pixels_subclass)
+    for shift in range(5):
+        assert (px << shift).data == 2**shift
+        assert (px >> shift).data == 2 ** (-shift)
+        assert ((px >> shift) << shift).data == 1
+        assert ((px << shift) >> shift).data == 1
+
+    px = Pixels(0)
+    assert isinstance(px, pixels_subclass)
+    for shift in range(5):
+        assert (px << shift).data == 0
+        assert (px >> shift).data == 0
+        assert ((px >> shift) << shift).data == 0
+        assert ((px << shift) >> shift).data == 0
 
 
 def test_two_arg_fns(pixels_subclass):

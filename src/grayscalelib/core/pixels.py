@@ -608,10 +608,7 @@ class Pixels(Encodable):
         """
         Multiply each value by two to the power of the supplied amount.
         """
-        if amount >= 0:
-            return self * 2**amount
-        else:
-            return self >> (-amount)
+        return self * 2**amount
 
     # rshift
 
@@ -619,10 +616,7 @@ class Pixels(Encodable):
         """
         Divide each value by two to the power of the supplied amount.
         """
-        if amount >= 0:
-            return self / 2**amount
-        else:
-            return self << (-amount)
+        return self / 2**amount
 
     # abs
 
