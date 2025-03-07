@@ -883,15 +883,14 @@ class Pixels(Encodable):
         f1, f2, f3, f4 = x1 * y1, x1 * y2, x2 * y1, x2 * y2
         black = floor(min(f1, f2, f3, f4))
         white = floor(max(f1, f2, f3, f4))
-        print(f"{binv_lo=} {binv_hi=} {x1=} {x2=} {y1=} {y2=} {black=} {white=}")
-        # Determine the intermediate discretization and the resulting discretization.
+        # Determine the resulting discretization.
         states = int(white - black) + 1
-        delta = 0.5
-        di = Discretization((black + delta, white + delta), (0, states - 1))
         dr = Discretization((black, white), (0, states - 1))
-        # Chose the value to assign to 0 / 0
+        # Determine the coefficients for the true division.
+        delta = 0.5 - (dr.eps / 4)
+        di = Discretization((black + delta, white + delta), (0, states - 1))
         nan = (black + white) / 2 + delta
-        # Perform the actual division
+        # Perform the actual division and rediscretize it.
         result = a._truediv_(b, di, nan).rediscretize(dr)
         assert result.shape == a.shape
         return result
