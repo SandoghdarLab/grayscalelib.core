@@ -37,7 +37,12 @@ class NumpyPixels(ConcretePixels):
         cls: type[T], data: npt.ArrayLike, discretization: Discretization
     ) -> Initializer[T]:
         dtype = integer_dtype(*discretization.codomain)
-        raw = np.vectorize(discretization, otypes=[dtype])(data)
+        a = discretization.a
+        b = discretization.b
+        lo = discretization.domain.lo
+        hi = discretization.domain.hi
+        val = a * np.clip(data, lo, hi) + b
+        raw = np.round(val).astype(dtype)
         return NumpyPixelsInitializer(raw.shape, discretization, raw)
 
     @classmethod
@@ -46,7 +51,8 @@ class NumpyPixels(ConcretePixels):
 
     @property
     def data(self) -> npt.NDArray[np.float64]:
-        return np.vectorize(self.discretization.inverse, otypes=[np.float64])(self._raw)
+        di = self.discretization.inverse
+        return (di.a * self._raw + di.b).astype(np.float64)
 
     @property
     def raw(self) -> npt.NDArray[uint]:
